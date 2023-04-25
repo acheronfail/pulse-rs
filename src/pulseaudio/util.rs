@@ -4,8 +4,16 @@ use libpulse_sys::pa_cvolume;
 #[derive(Debug)]
 pub struct VolumePercentage(pub f64);
 
+impl From<Volume> for VolumePercentage {
+    fn from(value: Volume) -> Self {
+        let value = value.0 as f64;
+        VolumePercentage(value / (Volume::NORMAL.0 as f64))
+    }
+}
+
 impl Into<ChannelVolumes> for VolumePercentage {
     fn into(self) -> ChannelVolumes {
+        // seems like a good limit?
         let pct = self.0.clamp(0.0, 1.5);
         // libpulse doesn't seem to offer a way to calculate percentages...
         let v = (Volume::NORMAL.0 as f64 * pct) as u32;

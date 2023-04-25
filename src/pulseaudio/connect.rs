@@ -5,26 +5,60 @@ use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender};
 
 use libpulse_binding::callbacks::ListResult;
-use libpulse_binding::context::introspect::SinkInfo;
-use libpulse_binding::context::subscribe::{InterestMaskSet, Operation};
+use libpulse_binding::channelmap::Position;
+use libpulse_binding::context::introspect::{SinkInfo, SourceInfo};
+use libpulse_binding::context::subscribe::{Facility, InterestMaskSet, Operation};
 use libpulse_binding::context::{Context, FlagSet, State};
 use libpulse_binding::mainloop::threaded::Mainloop;
 use libpulse_binding::proplist::{properties, Proplist};
+use libpulse_binding::volume::{Volume, VolumeDB, VolumeLinear};
 
-use super::api::{
-    FacilityIdentifier, Ident, PulseAudioCommand, PulseAudioCommandResult, PulseAudioServerInfo
-};
+use super::api::{PACommand, PAEvent, PAIdent, PAServerInfo};
+use crate::pulseaudio::api::VolumeReading;
+use crate::pulseaudio::util::VolumePercentage;
 
-macro_rules! cb {
-    ($ident:expr, $introspector:expr, $method:ident, $cb:expr) => {
-        paste::paste! {
-            match $ident {
-                Ident::Index(ref idx) => $introspector.[<$method index>](*idx, $cb),
-                Ident::Name(ref name) => $introspector.[<$method name>](name, $cb),
-            };
+type Ctx = Rc<RefCell<Context>>;
+type Res = Result<(), Box<dyn Error>>;
+
+macro_rules! impl_call {
+    ($method:ident, $inner:ty) => {
+        fn $method<F>(ident: PAIdent, ctx: &Ctx, mut f: F)
+        where
+            F: FnMut(PAIdent, $inner) -> Res + 'static,
+        {
+            macro_rules! inner {
+                ($prefix:ident, $cb:expr) => {
+                    paste::paste! {
+                        let introspector = ctx.borrow_mut().introspect();
+                        match ident.clone() {
+                            PAIdent::Index(idx) => introspector.[<$prefix index>](idx, $cb),
+                            PAIdent::Name(ref name) => introspector.[<$prefix name>](name, $cb),
+                        };
+                    }
+                };
+            }
+
+            paste::paste! {
+                inner!([<$method _by_>], move |result| {
+                    if let ListResult::Item(inner) = result {
+                        (&mut f)(ident.clone(), inner).unwrap();
+                    }
+                });
+            }
         }
     };
 }
+
+// fn get_sink_info<F>(ident: PulseAudioId, ctx: &Ctx, mut f: F)
+// where
+//     F: FnMut(PulseAudioId, &SinkInfo) -> Res + 'static,
+// {
+//     cb!(ident, ctx, get_sink_info_by_, move |result| {
+//         if let ListResult::Item(inner) = result {
+//             (&mut f)(ident.clone(), inner).unwrap();
+//         }
+//     });
+// }
 
 pub struct PulseAudio;
 
@@ -34,8 +68,8 @@ impl PulseAudio {
     // https://docs.rs/libpulse-binding/2.26.0/libpulse_binding/mainloop/threaded/index.html#example
     pub fn connect(
         with_app_name: impl AsRef<str>,
-        cmd_rx: Receiver<PulseAudioCommand>,
-        result_tx: Sender<PulseAudioCommandResult>,
+        cmd_rx: Receiver<PACommand>,
+        result_tx: Sender<PAEvent>,
     ) -> Result<!, Box<dyn Error>> {
         let app_name = with_app_name.as_ref();
 
@@ -96,20 +130,18 @@ impl PulseAudio {
                 assert!(success, "subscription failed");
             });
 
+            let tx = result_tx.clone();
             ctx.borrow_mut().set_subscribe_callback(Some(Box::new(
                 move |facility, operation, index| {
                     // SAFETY: as per libpulse_binding's documentation, this should be safe
-                    let facility = facility.unwrap();
                     let operation = operation.unwrap();
+                    let kind = facility.unwrap();
 
-                    let ident = FacilityIdentifier::new(facility, index);
+                    let id = PAIdent::Index(index);
                     match operation {
-                        Operation::New => {}
-                        Operation::Removed => {}
-                        Operation::Changed => {
-                            // TODO: send event out with `ident`
-                            dbg!(ident);
-                        }
+                        Operation::New => tx.send(PAEvent::New(kind, id)).unwrap(),
+                        Operation::Removed => tx.send(PAEvent::Removed(kind, id)).unwrap(),
+                        Operation::Changed => tx.send(PAEvent::Changed(kind, id)).unwrap(),
                     }
                 },
             )));
@@ -145,22 +177,28 @@ impl PulseAudio {
         }
     }
 
-    fn handle_cmd(
-        cmd: PulseAudioCommand,
-        ctx: &Rc<RefCell<Context>>,
-        result_tx: &Sender<PulseAudioCommandResult>,
-    ) {
+    fn handle_cmd(cmd: PACommand, ctx: &Ctx, result_tx: &Sender<PAEvent>) {
+        let tx = result_tx.clone();
         match cmd {
-            PulseAudioCommand::GetServerInfo => Self::get_server_info(ctx, result_tx.clone()),
-            PulseAudioCommand::GetMute(ident) => Self::get_mute(ident, ctx, result_tx.clone()),
+            PACommand::GetServerInfo => Self::get_server_info(ctx, tx),
+            PACommand::GetMute(kind, id) => match kind {
+                Facility::Sink => Self::get_sink_mute(id, ctx, tx),
+                Facility::Source => Self::get_source_mute(id, ctx, tx),
+                _ => todo!(),
+            },
+            PACommand::GetVolume(kind, id) => match kind {
+                Facility::Sink => Self::get_sink_volume(id, ctx, tx),
+                Facility::Source => Self::get_source_volume(id, ctx, tx),
+                _ => todo!(),
+            },
             _ => todo!(),
         }
     }
 
-    fn get_server_info(ctx: &Rc<RefCell<Context>>, tx: Sender<PulseAudioCommandResult>) {
+    fn get_server_info(ctx: &Ctx, tx: Sender<PAEvent>) {
         let introspector = ctx.borrow_mut().introspect();
         introspector.get_server_info(move |info| {
-            tx.send(PulseAudioCommandResult::ServerInfo(PulseAudioServerInfo {
+            tx.send(PAEvent::ServerInfo(PAServerInfo {
                 user_name: info.user_name.as_ref().map(|cow| cow.to_string()),
                 host_name: info.host_name.as_ref().map(|cow| cow.to_string()),
                 server_version: info.server_version.as_ref().map(|cow| cow.to_string()),
@@ -175,18 +213,62 @@ impl PulseAudio {
         });
     }
 
-    fn get_mute(ident: Ident, ctx: &Rc<RefCell<Context>>, tx: Sender<PulseAudioCommandResult>) {
-        let introspector = ctx.borrow_mut().introspect();
-        cb!(
-            ident.clone(),
-            introspector,
-            get_sink_info_by_,
-            move |result: ListResult<&SinkInfo>| {
-                if let ListResult::Item(inner) = result {
-                    tx.send(PulseAudioCommandResult::Mute(ident.clone(), inner.mute))
-                        .unwrap();
-                }
-            }
-        );
+    impl_call!(get_sink_info, &SinkInfo);
+    impl_call!(get_source_info, &SourceInfo);
+
+    fn get_sink_mute(ident: PAIdent, ctx: &Ctx, tx: Sender<PAEvent>) {
+        Self::get_sink_info(ident, ctx, move |ident, info| {
+            tx.send(PAEvent::Mute(ident, info.mute))?;
+            Ok(())
+        });
+    }
+
+    fn get_source_mute(ident: PAIdent, ctx: &Ctx, tx: Sender<PAEvent>) {
+        Self::get_source_info(ident, ctx, move |ident, info| {
+            tx.send(PAEvent::Mute(ident, info.mute))?;
+            Ok(())
+        });
+    }
+
+    fn get_sink_volume(ident: PAIdent, ctx: &Ctx, tx: Sender<PAEvent>) {
+        Self::get_sink_info(ident, ctx, move |ident, info| {
+            tx.send(PAEvent::Volume(
+                ident,
+                Self::read_volumes(
+                    info.channel_map.get().into_iter(),
+                    info.volume.get().into_iter(),
+                ),
+            ))?;
+            Ok(())
+        });
+    }
+
+    fn get_source_volume(ident: PAIdent, ctx: &Ctx, tx: Sender<PAEvent>) {
+        Self::get_source_info(ident, ctx, move |ident, info| {
+            tx.send(PAEvent::Volume(
+                ident,
+                Self::read_volumes(
+                    info.channel_map.get().into_iter(),
+                    info.volume.get().into_iter(),
+                ),
+            ))?;
+            Ok(())
+        });
+    }
+
+    fn read_volumes<'a>(
+        channels: impl Iterator<Item = &'a Position>,
+        volumes: impl Iterator<Item = &'a Volume>,
+    ) -> Vec<VolumeReading> {
+        channels
+            .zip(volumes)
+            .map(|(chan, vol)| VolumeReading {
+                channel: *chan,
+                percentage: VolumePercentage::from(*vol).0,
+                linear: VolumeLinear::from(*vol).0,
+                value: vol.0,
+                db: VolumeDB::from(*vol).0,
+            })
+            .collect()
     }
 }

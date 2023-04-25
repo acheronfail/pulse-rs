@@ -1,42 +1,48 @@
-use libpulse_binding::context::subscribe::Facility;
-use libpulse_binding::{channelmap, sample};
+use libpulse_binding::channelmap::{self, Position};
+pub use libpulse_binding::context::subscribe::Facility as Kind;
+use libpulse_binding::sample;
+
+#[derive(Debug)]
+pub struct VolumeReading {
+    /// Which channel this volume belongs to
+    pub channel: Position,
+    /// Volume as a percentage
+    pub percentage: f64,
+    /// Volume as a linear factor
+    pub linear: f64,
+    /// Volume actual value (`pa_volume_t`)
+    pub value: u32,
+    /// Volume in decibels
+    pub db: f64,
+}
 
 #[derive(Debug, Clone)]
-pub enum Ident {
+pub enum PAIdent {
     Index(u32),
-    Name(String)
+    Name(String),
 }
 
 #[derive(Debug)]
-pub struct FacilityIdentifier {
-    pub facility: Facility,
-    pub index: u32,
-}
-
-impl FacilityIdentifier {
-    pub fn new(facility: Facility, index: u32) -> FacilityIdentifier {
-        FacilityIdentifier { facility, index }
-    }
-}
-
-#[derive(Debug)]
-pub enum PulseAudioCommand {
+pub enum PACommand {
     GetServerInfo,
-    GetVolume(Ident),
+    GetVolume(Kind, PAIdent),
     SetVolume, // TODO: volume struct?
-    GetMute(Ident),
-    SetMute(Ident),
+    GetMute(Kind, PAIdent),
+    SetMute(Kind, PAIdent),
 }
 
 #[derive(Debug)]
-pub enum PulseAudioCommandResult {
-    ServerInfo(PulseAudioServerInfo),
-    Volume, // TODO: volume struct?
-    Mute(Ident, bool),
+pub enum PAEvent {
+    New(Kind, PAIdent),
+    Removed(Kind, PAIdent),
+    Changed(Kind, PAIdent),
+    ServerInfo(PAServerInfo),
+    Volume(PAIdent, Vec<VolumeReading>),
+    Mute(PAIdent, bool),
 }
 
 #[derive(Debug)]
-pub struct PulseAudioServerInfo {
+pub struct PAServerInfo {
     /// User name of the daemon process.
     pub user_name: Option<String>,
     /// Host name the daemon is running on.
