@@ -104,7 +104,6 @@ dependencies = [
  "libpulse-binding",
  "libpulse-sys",
  "paste",
- "quote",
 ]
 
 [[package]]

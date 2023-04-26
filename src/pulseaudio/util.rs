@@ -1,27 +1,57 @@
+use libpulse_binding::channelmap::{Map, Position};
 use libpulse_binding::volume::{ChannelVolumes, Volume};
-use libpulse_sys::pa_cvolume;
+use libpulse_sys::{pa_channel_map, pa_cvolume};
 
-#[derive(Debug)]
-pub struct VolumePercentage(pub f64);
+use super::api::{VolumeReadings, VolumeSpec};
 
-impl From<Volume> for VolumePercentage {
-    fn from(value: Volume) -> Self {
-        let value = value.0 as f64;
-        VolumePercentage(value / (Volume::NORMAL.0 as f64))
+pub fn new_channel_volumes(volumes: Vec<Volume>) -> ChannelVolumes {
+    let mut inner = pa_cvolume::default();
+    inner.channels = volumes.len() as u8;
+    for (i, vol) in volumes.into_iter().enumerate() {
+        inner.values[i] = vol.0;
+    }
+
+    // is this really the only way to create a `ChannelVolumes`?
+    inner.into()
+}
+
+pub fn updated_channel_volumes(
+    current: ChannelVolumes,
+    volume_spec: &VolumeSpec,
+) -> ChannelVolumes {
+    match volume_spec {
+        VolumeSpec::All(vol) => {
+            let mut cv = current.clone();
+            cv.set(current.len(), (*vol).into());
+            cv
+        }
+        VolumeSpec::Channels(vols) => {
+            let volumes: Vec<Volume> = vols.into_iter().map(|v| (*v).into()).collect();
+            // TODO: return an error here, rather than asserting
+            assert!(
+                volumes.len() as u8 == current.len(),
+                "Failed to set volumes. Provided channel count: {}, actual count: {}",
+                volumes.len(),
+                current.len()
+            );
+            new_channel_volumes(volumes)
+        }
     }
 }
 
-impl Into<ChannelVolumes> for VolumePercentage {
-    fn into(self) -> ChannelVolumes {
-        // seems like a good limit?
-        let pct = self.0.clamp(0.0, 1.5);
-        // libpulse doesn't seem to offer a way to calculate percentages...
-        let v = (Volume::NORMAL.0 as f64 * pct) as u32;
-        // is this really the only way to create a `ChannelVolumes`?
-        let mut inner = pa_cvolume::default();
-        inner.channels = 2;
-        inner.values[0] = v;
-        inner.values[1] = v;
-        inner.into()
+pub fn new_channel_map(channels: Vec<Position>) -> Map {
+    let mut inner = pa_channel_map::default();
+    inner.channels = channels.len() as u8;
+    for (i, chan) in channels.into_iter().enumerate() {
+        inner.map[i] = chan.into();
+    }
+
+    // is this really the only way to create a `Map`?
+    inner.into()
+}
+
+impl From<VolumeReadings> for ChannelVolumes {
+    fn from(value: VolumeReadings) -> Self {
+        new_channel_volumes(value.inner.into_iter().map(|v| v.volume).collect())
     }
 }
