@@ -24,6 +24,12 @@ pub enum PACommand {
 
 #[derive(Debug)]
 pub enum PAEvent {
+    // Generic error event
+    Error(String),
+
+    // Generic operation event
+    Complete(bool),
+
     // Subscription events
     SubscriptionNew(Facility, PAIdent),
     SubscriptionRemoved(Facility, PAIdent),

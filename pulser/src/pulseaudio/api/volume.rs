@@ -1,3 +1,6 @@
+use std::error::Error;
+use std::str::FromStr;
+
 use libpulse_binding::channelmap::Position;
 use libpulse_binding::volume::{Volume, VolumeDB, VolumeLinear};
 
@@ -82,6 +85,38 @@ impl From<PAVol> for Volume {
             // libpulse doesn't seem to offer a way to calculate percentages...
             PAVol::Percentage(pct) => Volume((Volume::NORMAL.0 as f64 * (pct / 100.0)) as u32),
         }
+    }
+}
+
+impl FromStr for PAVol {
+    type Err = Box<dyn Error>;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut s = s.to_string();
+
+        // "<FLOAT>L" (linear)
+        if s.ends_with("L") {
+            s.pop();
+            return Ok(PAVol::Linear(s.trim().parse::<f64>()?));
+        }
+
+        // "<FLOAT>dB" (decibels)
+        if s.ends_with("dB") {
+            s.pop();
+            s.pop();
+            return Ok(PAVol::Decibels(s.trim().parse::<f64>()?));
+        }
+
+        // "<INT|FLOAT>%" (percentage)
+        if s.ends_with("%") {
+            s.pop();
+            return Ok(match s.trim().parse::<f64>() {
+                Ok(f) => PAVol::Percentage(f),
+                Err(_) => PAVol::Percentage(s.trim().parse::<u32>()? as f64),
+            });
+        }
+
+        // "<INT>" (integer)
+        Ok(PAVol::Value(s.trim().parse::<u32>()?))
     }
 }
 

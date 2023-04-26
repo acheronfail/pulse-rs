@@ -2,7 +2,8 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::ops::Deref;
 use std::rc::Rc;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::thread;
 
 use libpulse_binding::callbacks::ListResult;
 use libpulse_binding::channelmap::Position;
@@ -15,6 +16,7 @@ use libpulse_binding::volume::Volume;
 
 use super::api::*;
 use super::util::updated_channel_volumes;
+use crate::ignore::Ignore;
 use crate::pulseaudio::api::VolumeReading;
 
 type Ctx = Rc<RefCell<Context>>;
@@ -22,10 +24,12 @@ type Res = Result<(), Box<dyn Error>>;
 
 macro_rules! impl_call {
     ($method:ident, $inner:ty) => {
-        fn $method<F>(ident: PAIdent, ctx: Ctx, mut f: F)
+        fn $method<F>(&self, ident: PAIdent, mut f: F)
         where
             F: FnMut(PAIdent, Ctx, $inner) -> Res + 'static,
         {
+            let tx = self.tx.clone();
+            let ctx = self.ctx.clone();
             macro_rules! inner {
                 ($prefix:ident, $cb:expr) => {
                     paste::paste! {
@@ -40,8 +44,24 @@ macro_rules! impl_call {
 
             paste::paste! {
                 inner!([<$method _by_>], move |result| {
-                    if let ListResult::Item(inner) = result {
-                        (&mut f)(ident.clone(), ctx.clone(), inner).unwrap();
+                    match result {
+                        // The result we wanted, act on it
+                        ListResult::Item(inner) => if let Err(e) = (&mut f)(ident.clone(), ctx.clone(), inner) {
+                            tx.send(PAEvent::Error(e.to_string())).ignore();
+                        },
+                        // An error occurred, check it and send an error event
+                        ListResult::Error => {
+                            let err = ctx.borrow_mut().errno().to_string();
+                            let method = stringify!($method);
+                            tx.send(PAEvent::Error(format!(
+                                "{} failed: {}",
+                                method,
+                                err.unwrap_or("An unknown error occurred".into())
+                            )))
+                            .ignore();
+                        },
+                        // We reached the end of the list
+                        ListResult::End => {},
                     }
                 });
             }
@@ -49,32 +69,67 @@ macro_rules! impl_call {
     };
 }
 
-pub struct PulseAudio;
+pub struct PulseAudio {
+    rx: Receiver<PACommand>,
+    tx: Sender<PAEvent>,
+    ctx: Rc<RefCell<Context>>,
+    mainloop: Rc<RefCell<Mainloop>>,
+}
 
 impl PulseAudio {
+    // TODO: tokio support???
+    /// Sets up a connection to PulseAudio. PulseAudio uses a loop-based asynchronous API, and so
+    /// when this is called, a background thread will be created to setup up a threaded loop API for
+    /// PulseAudio.
+    ///
+    /// If the `Receiver<PAEvent>` is dropped, then this will shut down PulseAudio's loop and clean
+    /// up.
+    pub fn connect(
+        app_name: impl AsRef<str> + Send + 'static,
+    ) -> (Sender<PACommand>, Receiver<PAEvent>) {
+        let (result_tx, result_rx) = mpsc::channel();
+        let (cmd_tx, cmd_rx) = mpsc::channel();
+
+        // Run pulseaudio loop in background thread
+        thread::spawn(move || {
+            let pa = match PulseAudio::init(app_name.as_ref(), result_tx, cmd_rx) {
+                Ok(pa) => pa,
+                Err(e) => panic!("An error occurred while connecting to pulseaudio: {}", e),
+            };
+
+            if let Err(e) = pa.start_loop() {
+                panic!("An error occurred while interfacing with pulseaudio: {}", e);
+            }
+        });
+
+        (cmd_tx, result_rx)
+    }
+
     // https://freedesktop.org/software/pulseaudio/doxygen/threaded_mainloop.html
     // https://gavv.net/articles/pulseaudio-under-the-hood/#asynchronous-api
     // https://docs.rs/libpulse-binding/2.26.0/libpulse_binding/mainloop/threaded/index.html#example
-    pub fn connect(
+    fn init(
         with_app_name: impl AsRef<str>,
-        cmd_rx: Receiver<PACommand>,
-        result_tx: Sender<PAEvent>,
-    ) -> Result<!, Box<dyn Error>> {
+        tx: Sender<PAEvent>,
+        rx: Receiver<PACommand>,
+    ) -> Result<PulseAudio, Box<dyn Error>> {
         let app_name = with_app_name.as_ref();
 
-        let mut proplist = Proplist::new().unwrap();
+        let mut proplist = Proplist::new().ok_or("Failed to create PulseAudio Proplist")?;
         proplist
             .set_str(properties::APPLICATION_NAME, app_name)
             .map_err(|_| "Failed to update property list")?;
 
-        let mainloop: Rc<RefCell<Mainloop>> = Rc::new(RefCell::new(Mainloop::new().unwrap()));
+        let mainloop: Rc<RefCell<Mainloop>> = Rc::new(RefCell::new(
+            Mainloop::new().ok_or("Failed to create PulseAudio Mainloop")?,
+        ));
         let ctx = Rc::new(RefCell::new(
             Context::new_with_proplist(
                 mainloop.borrow_mut().deref(),
                 &format!("{}Context", app_name),
                 &proplist,
             )
-            .unwrap(),
+            .ok_or("Failed to create PulseAudio Context")?,
         ));
 
         // setup context
@@ -103,7 +158,7 @@ impl PulseAudio {
                 State::Failed | State::Terminated => {
                     mainloop.borrow_mut().unlock();
                     mainloop.borrow_mut().stop();
-                    panic!();
+                    return Err("Failed to connect".into());
                 }
                 _ => mainloop.borrow_mut().wait(),
             }
@@ -119,78 +174,88 @@ impl PulseAudio {
                 assert!(success, "subscription failed");
             });
 
-            let tx = result_tx.clone();
+            let tx = tx.clone();
             ctx.borrow_mut().set_subscribe_callback(Some(Box::new(
                 move |facility, operation, index| {
                     // SAFETY: as per libpulse_binding's documentation, this should be safe
                     let operation = operation.unwrap();
                     let kind = facility.unwrap();
 
+                    // send off a subscription event
                     let id = PAIdent::Index(index);
                     match operation {
-                        Operation::New => tx.send(PAEvent::SubscriptionNew(kind, id)).unwrap(),
+                        Operation::New => tx.send(PAEvent::SubscriptionNew(kind, id)).ignore(),
                         Operation::Removed => {
-                            tx.send(PAEvent::SubscriptionRemoved(kind, id)).unwrap()
+                            tx.send(PAEvent::SubscriptionRemoved(kind, id)).ignore()
                         }
                         Operation::Changed => {
-                            tx.send(PAEvent::SubscriptionChanged(kind, id)).unwrap()
+                            tx.send(PAEvent::SubscriptionChanged(kind, id)).ignore()
                         }
                     }
                 },
             )));
         }
 
-        // opportunity to get initial state before starting send/recv loop
-        {
-            let ctx = ctx.clone();
-            Self::get_server_info(ctx, result_tx.clone());
-        }
-
         mainloop.borrow_mut().unlock();
 
-        // start mainloop
+        Ok(PulseAudio {
+            tx,
+            rx,
+            ctx,
+            mainloop,
+        })
+    }
+
+    pub fn start_loop(&self) -> Result<!, Box<dyn Error>> {
         loop {
-            let cmd = cmd_rx.recv()?;
+            // wait for our next command
+            let cmd = match self.rx.recv() {
+                Ok(cmd) => cmd,
+                Err(_) => {
+                    self.mainloop.borrow_mut().unlock();
+                    self.mainloop.borrow_mut().stop();
+                    return Err("Command sender was closed, shutting down".into());
+                }
+            };
 
             // lock and pause mainloop
-            mainloop.borrow_mut().lock();
+            self.mainloop.borrow_mut().lock();
 
             // verify connection state
-            match ctx.borrow_mut().get_state() {
+            match self.ctx.borrow_mut().get_state() {
                 State::Ready => {}
                 _ => {
-                    mainloop.borrow_mut().unlock();
-                    todo!("disconnected while working");
+                    self.mainloop.borrow_mut().unlock();
+                    return Err("Disconnected while working, shutting down".into());
                 }
             }
 
-            Self::handle_cmd(cmd, &ctx, &result_tx);
+            self.handle_cmd(cmd);
 
             // resume mainloop
-            mainloop.borrow_mut().unlock();
+            self.mainloop.borrow_mut().unlock();
         }
     }
 
-    fn handle_cmd(cmd: PACommand, ctx: &Ctx, result_tx: &Sender<PAEvent>) {
-        let tx = result_tx.clone();
-        let ctx = ctx.clone();
+    fn handle_cmd(&self, cmd: PACommand) {
         match cmd {
-            PACommand::GetServerInfo => Self::get_server_info(ctx, tx),
+            PACommand::GetServerInfo => self.get_server_info(),
 
-            PACommand::GetSinkMute(id) => Self::get_sink_mute(id, ctx, tx),
-            PACommand::GetSinkVolume(id) => Self::get_sink_volume(id, ctx, tx),
-            PACommand::SetSinkMute(id, mute) => Self::set_sink_mute(id, ctx, mute),
-            PACommand::SetSinkVolume(id, vol) => Self::set_sink_volume(id, ctx, vol),
+            PACommand::GetSinkMute(id) => self.get_sink_mute(id),
+            PACommand::GetSinkVolume(id) => self.get_sink_volume(id),
+            PACommand::SetSinkMute(id, mute) => self.set_sink_mute(id, mute),
+            PACommand::SetSinkVolume(id, vol) => self.set_sink_volume(id, vol),
 
-            PACommand::GetSourceMute(id) => Self::get_source_mute(id, ctx, tx),
-            PACommand::GetSourceVolume(id) => Self::get_source_volume(id, ctx, tx),
-            PACommand::SetSourceMute(id, mute) => Self::set_source_mute(id, ctx, mute),
-            PACommand::SetSourceVolume(id, vol) => Self::set_source_volume(id, ctx, vol),
+            PACommand::GetSourceMute(id) => self.get_source_mute(id),
+            PACommand::GetSourceVolume(id) => self.get_source_volume(id),
+            PACommand::SetSourceMute(id, mute) => self.set_source_mute(id, mute),
+            PACommand::SetSourceVolume(id, vol) => self.set_source_volume(id, vol),
         }
     }
 
-    fn get_server_info(ctx: Ctx, tx: Sender<PAEvent>) {
-        let introspector = ctx.borrow_mut().introspect();
+    fn get_server_info(&self) {
+        let tx = self.tx.clone();
+        let introspector = self.ctx.borrow_mut().introspect();
         introspector.get_server_info(move |info| {
             tx.send(PAEvent::ServerInfo(PAServerInfo {
                 user_name: info.user_name.as_ref().map(|cow| cow.to_string()),
@@ -203,7 +268,7 @@ impl PulseAudio {
                 cookie: info.cookie,
                 channel_map: info.channel_map,
             }))
-            .unwrap();
+            .ignore();
         });
     }
 
@@ -214,23 +279,29 @@ impl PulseAudio {
      * Sink
      */
 
-    fn get_sink_mute(ident: PAIdent, ctx: Ctx, tx: Sender<PAEvent>) {
-        Self::get_sink_info(ident, ctx, move |ident, _, info| {
+    fn get_sink_mute(&self, ident: PAIdent) {
+        let tx = self.tx.clone();
+        self.get_sink_info(ident, move |ident, _, info| {
             tx.send(PAEvent::Mute(ident, info.mute))?;
             Ok(())
         });
     }
 
-    fn set_sink_mute(ident: PAIdent, ctx: Ctx, mute: bool) {
-        let mut introspector = ctx.borrow_mut().introspect();
+    fn set_sink_mute(&self, ident: PAIdent, mute: bool) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
         match ident {
-            PAIdent::Index(idx) => introspector.set_sink_mute_by_index(idx, mute, None),
-            PAIdent::Name(ref name) => introspector.set_sink_mute_by_name(name, mute, None),
+            PAIdent::Index(idx) => {
+                introspector.set_sink_mute_by_index(idx, mute, Some(self.success_cb()))
+            }
+            PAIdent::Name(ref name) => {
+                introspector.set_sink_mute_by_name(name, mute, Some(self.success_cb()))
+            }
         };
     }
 
-    fn get_sink_volume(ident: PAIdent, ctx: Ctx, tx: Sender<PAEvent>) {
-        Self::get_sink_info(ident, ctx, move |ident, _, info| {
+    fn get_sink_volume(&self, ident: PAIdent) {
+        let tx = self.tx.clone();
+        self.get_sink_info(ident, move |ident, _, info| {
             tx.send(PAEvent::Volume(
                 ident,
                 Self::read_volumes(
@@ -242,12 +313,14 @@ impl PulseAudio {
         });
     }
 
-    fn set_sink_volume(ident: PAIdent, ctx: Ctx, volume_spec: VolumeSpec) {
-        Self::get_sink_info(ident, ctx, move |ident, ctx, info| {
+    fn set_sink_volume(&self, ident: PAIdent, volume_spec: VolumeSpec) {
+        // FIXME: send success event here
+        let cb = self.success_cb();
+        self.get_sink_info(ident, move |ident, ctx, info| {
             let mut introspector = ctx.borrow_mut().introspect();
             let cv = updated_channel_volumes(info.volume, &volume_spec);
             match ident {
-                PAIdent::Index(idx) => introspector.set_sink_volume_by_index(idx, &cv, None),
+                PAIdent::Index(idx) => introspector.set_sink_volume_by_index(idx, &cv, Some(cb)),
                 PAIdent::Name(ref name) => introspector.set_sink_volume_by_name(name, &cv, None),
             };
 
@@ -259,23 +332,29 @@ impl PulseAudio {
      * Source
      */
 
-    fn get_source_mute(ident: PAIdent, ctx: Ctx, tx: Sender<PAEvent>) {
-        Self::get_source_info(ident, ctx, move |ident, _, info| {
+    fn get_source_mute(&self, ident: PAIdent) {
+        let tx = self.tx.clone();
+        self.get_source_info(ident, move |ident, _, info| {
             tx.send(PAEvent::Mute(ident, info.mute))?;
             Ok(())
         });
     }
 
-    fn set_source_mute(ident: PAIdent, ctx: Ctx, mute: bool) {
-        let mut introspector = ctx.borrow_mut().introspect();
+    fn set_source_mute(&self, ident: PAIdent, mute: bool) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
         match ident {
-            PAIdent::Index(idx) => introspector.set_source_mute_by_index(idx, mute, None),
-            PAIdent::Name(ref name) => introspector.set_source_mute_by_name(name, mute, None),
+            PAIdent::Index(idx) => {
+                introspector.set_source_mute_by_index(idx, mute, Some(self.success_cb()))
+            }
+            PAIdent::Name(ref name) => {
+                introspector.set_source_mute_by_name(name, mute, Some(self.success_cb()))
+            }
         };
     }
 
-    fn get_source_volume(ident: PAIdent, ctx: Ctx, tx: Sender<PAEvent>) {
-        Self::get_source_info(ident, ctx, move |ident, _, info| {
+    fn get_source_volume(&self, ident: PAIdent) {
+        let tx = self.tx.clone();
+        self.get_source_info(ident, move |ident, _, info| {
             tx.send(PAEvent::Volume(
                 ident,
                 Self::read_volumes(
@@ -288,8 +367,8 @@ impl PulseAudio {
         });
     }
 
-    fn set_source_volume(ident: PAIdent, ctx: Ctx, volume_spec: VolumeSpec) {
-        Self::get_source_info(ident, ctx, move |ident, ctx, info| {
+    fn set_source_volume(&self, ident: PAIdent, volume_spec: VolumeSpec) {
+        self.get_source_info(ident, move |ident, ctx, info| {
             let mut introspector = ctx.borrow_mut().introspect();
             let cv = updated_channel_volumes(info.volume, &volume_spec);
             match ident {
@@ -313,5 +392,12 @@ impl PulseAudio {
             .zip(volumes)
             .map(|(chan, vol)| VolumeReading::new(chan, vol))
             .collect()
+    }
+
+    fn success_cb(&self) -> Box<impl FnMut(bool)> {
+        let tx = self.tx.clone();
+        Box::new(move |success| {
+            tx.send(PAEvent::Complete(success)).ignore();
+        })
     }
 }
