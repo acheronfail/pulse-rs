@@ -23,10 +23,10 @@ type Ctx = Rc<RefCell<Context>>;
 type Res = Result<(), Box<dyn Error>>;
 
 macro_rules! impl_call {
-    ($method:ident, $inner:ty) => {
+    ($method:ident, $ty:ident) => {
         fn $method<F>(&self, ident: PAIdent, mut f: F)
         where
-            F: FnMut(PAIdent, Ctx, $inner) -> Res + 'static,
+            F: FnMut(PAIdent, Ctx, &$ty) -> Res + 'static,
         {
             let tx = self.tx.clone();
             let ctx = self.ctx.clone();
@@ -50,19 +50,33 @@ macro_rules! impl_call {
                             tx.send(PAEvent::Error(e.to_string())).ignore();
                         },
                         // An error occurred, check it and send an error event
-                        ListResult::Error => {
-                            let err = ctx.borrow_mut().errno().to_string();
-                            let method = stringify!($method);
-                            tx.send(PAEvent::Error(format!(
-                                "{} failed: {}",
-                                method,
-                                err.unwrap_or("An unknown error occurred".into())
-                            )))
-                            .ignore();
-                        },
+                        ListResult::Error => Self::handle_list_result_err(&ctx, &tx),
                         // We reached the end of the list
                         ListResult::End => {},
                     }
+                });
+            }
+        }
+    };
+}
+
+macro_rules! impl_list_call {
+    ($pa_method:ident, $ty:ident) => {
+        fn $pa_method(&self) {
+            paste::paste! {
+                let introspector = self.ctx.borrow_mut().introspect();
+                let tx = self.tx.clone();
+                let ctx = self.ctx.clone();
+                let mut v: Vec<[<PA $ty>]> = vec![];
+                introspector.$pa_method(move |result: ListResult<&$ty>| {
+                    match result {
+                        // Called for each item in the list
+                        ListResult::Item(info) => v.push([<PA $ty>]::from(info)),
+                        // Called at the end of the iteration, send the event back
+                        ListResult::End => tx.send(PAEvent::[<$ty List>](v.clone())).ignore(),
+                        // An error occurred, check it and send an error event
+                        ListResult::Error => Self::handle_list_result_err(&ctx, &tx),
+                    };
                 });
             }
         }
@@ -241,11 +255,13 @@ impl PulseAudio {
         match cmd {
             PACommand::GetServerInfo => self.get_server_info(),
 
+            PACommand::GetSinkInfoList => self.get_sink_info_list(),
             PACommand::GetSinkMute(id) => self.get_sink_mute(id),
             PACommand::GetSinkVolume(id) => self.get_sink_volume(id),
             PACommand::SetSinkMute(id, mute) => self.set_sink_mute(id, mute),
             PACommand::SetSinkVolume(id, vol) => self.set_sink_volume(id, vol),
 
+            PACommand::GetSourceInfoList => self.get_source_info_list(),
             PACommand::GetSourceMute(id) => self.get_source_mute(id),
             PACommand::GetSourceVolume(id) => self.get_source_volume(id),
             PACommand::SetSourceMute(id, mute) => self.set_source_mute(id, mute),
@@ -257,44 +273,37 @@ impl PulseAudio {
         let tx = self.tx.clone();
         let introspector = self.ctx.borrow_mut().introspect();
         introspector.get_server_info(move |info| {
-            tx.send(PAEvent::ServerInfo(PAServerInfo {
-                user_name: info.user_name.as_ref().map(|cow| cow.to_string()),
-                host_name: info.host_name.as_ref().map(|cow| cow.to_string()),
-                server_version: info.server_version.as_ref().map(|cow| cow.to_string()),
-                server_name: info.server_name.as_ref().map(|cow| cow.to_string()),
-                sample_spec: info.sample_spec,
-                default_sink_name: info.default_sink_name.as_ref().map(|cow| cow.to_string()),
-                default_source_name: info.default_source_name.as_ref().map(|cow| cow.to_string()),
-                cookie: info.cookie,
-                channel_map: info.channel_map,
-            }))
-            .ignore();
+            tx.send(PAEvent::ServerInfo(info.into())).ignore();
         });
     }
 
-    impl_call!(get_sink_info, &SinkInfo);
-    impl_call!(get_source_info, &SourceInfo);
+    impl_call!(get_sink_info, SinkInfo);
+    impl_call!(get_source_info, SourceInfo);
 
-    /**
-     * Sink
+    impl_list_call!(get_sink_info_list, SinkInfo);
+    impl_list_call!(get_source_info_list, SourceInfo);
+
+    /*
+     * Sinks
      */
 
     fn get_sink_mute(&self, ident: PAIdent) {
         let tx = self.tx.clone();
         self.get_sink_info(ident, move |ident, _, info| {
-            tx.send(PAEvent::Mute(ident, info.mute))?;
+            tx.send(PAEvent::Mute(ident, info.mute)).ignore();
             Ok(())
         });
     }
 
     fn set_sink_mute(&self, ident: PAIdent, mute: bool) {
         let mut introspector = self.ctx.borrow_mut().introspect();
+        let tx = self.tx.clone();
         match ident {
             PAIdent::Index(idx) => {
-                introspector.set_sink_mute_by_index(idx, mute, Some(self.success_cb()))
+                introspector.set_sink_mute_by_index(idx, mute, Some(Self::success_cb(tx)))
             }
             PAIdent::Name(ref name) => {
-                introspector.set_sink_mute_by_name(name, mute, Some(self.success_cb()))
+                introspector.set_sink_mute_by_name(name, mute, Some(Self::success_cb(tx)))
             }
         };
     }
@@ -308,46 +317,52 @@ impl PulseAudio {
                     info.channel_map.get().into_iter(),
                     info.volume.get().into_iter(),
                 ),
-            ))?;
+            ))
+            .ignore();
             Ok(())
         });
     }
 
     fn set_sink_volume(&self, ident: PAIdent, volume_spec: VolumeSpec) {
-        // FIXME: send success event here
-        let cb = self.success_cb();
+        let tx = self.tx.clone();
         self.get_sink_info(ident, move |ident, ctx, info| {
             let mut introspector = ctx.borrow_mut().introspect();
             let cv = updated_channel_volumes(info.volume, &volume_spec);
+            let tx = tx.clone();
             match ident {
-                PAIdent::Index(idx) => introspector.set_sink_volume_by_index(idx, &cv, Some(cb)),
-                PAIdent::Name(ref name) => introspector.set_sink_volume_by_name(name, &cv, None),
+                PAIdent::Index(idx) => {
+                    introspector.set_sink_volume_by_index(idx, &cv, Some(Self::success_cb(tx)))
+                }
+                PAIdent::Name(ref name) => {
+                    introspector.set_sink_volume_by_name(name, &cv, Some(Self::success_cb(tx)))
+                }
             };
 
             Ok(())
         });
     }
 
-    /**
-     * Source
+    /*
+     * Sources
      */
 
     fn get_source_mute(&self, ident: PAIdent) {
         let tx = self.tx.clone();
         self.get_source_info(ident, move |ident, _, info| {
-            tx.send(PAEvent::Mute(ident, info.mute))?;
+            tx.send(PAEvent::Mute(ident, info.mute)).ignore();
             Ok(())
         });
     }
 
     fn set_source_mute(&self, ident: PAIdent, mute: bool) {
         let mut introspector = self.ctx.borrow_mut().introspect();
+        let tx = self.tx.clone();
         match ident {
             PAIdent::Index(idx) => {
-                introspector.set_source_mute_by_index(idx, mute, Some(self.success_cb()))
+                introspector.set_source_mute_by_index(idx, mute, Some(Self::success_cb(tx)))
             }
             PAIdent::Name(ref name) => {
-                introspector.set_source_mute_by_name(name, mute, Some(self.success_cb()))
+                introspector.set_source_mute_by_name(name, mute, Some(Self::success_cb(tx)))
             }
         };
     }
@@ -362,18 +377,25 @@ impl PulseAudio {
                     info.volume.get().into_iter(),
                 )
                 .into(),
-            ))?;
+            ))
+            .ignore();
             Ok(())
         });
     }
 
     fn set_source_volume(&self, ident: PAIdent, volume_spec: VolumeSpec) {
+        let tx = self.tx.clone();
         self.get_source_info(ident, move |ident, ctx, info| {
             let mut introspector = ctx.borrow_mut().introspect();
             let cv = updated_channel_volumes(info.volume, &volume_spec);
+            let tx = tx.clone();
             match ident {
-                PAIdent::Index(idx) => introspector.set_source_volume_by_index(idx, &cv, None),
-                PAIdent::Name(ref name) => introspector.set_source_volume_by_name(name, &cv, None),
+                PAIdent::Index(idx) => {
+                    introspector.set_source_volume_by_index(idx, &cv, Some(Self::success_cb(tx)))
+                }
+                PAIdent::Name(ref name) => {
+                    introspector.set_source_volume_by_name(name, &cv, Some(Self::success_cb(tx)))
+                }
             };
 
             Ok(())
@@ -394,10 +416,20 @@ impl PulseAudio {
             .collect()
     }
 
-    fn success_cb(&self) -> Box<impl FnMut(bool)> {
-        let tx = self.tx.clone();
+    fn success_cb(tx: Sender<PAEvent>) -> Box<impl FnMut(bool)> {
         Box::new(move |success| {
             tx.send(PAEvent::Complete(success)).ignore();
         })
+    }
+
+    fn handle_list_result_err(ctx: &Ctx, tx: &Sender<PAEvent>) {
+        let err = ctx.borrow_mut().errno().to_string();
+        let method = stringify!($method);
+        tx.send(PAEvent::Error(format!(
+            "{} failed: {}",
+            method,
+            err.unwrap_or("An unknown error occurred".into())
+        )))
+        .ignore();
     }
 }

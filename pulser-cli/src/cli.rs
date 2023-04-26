@@ -12,10 +12,19 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     Info,
+
+    // TODO: args for list, to filter on types
+    List,
+
     GetSinkMute(BaseArgs),
-    GetSinkVolume(BaseArgs),
     SetSinkMute(SetMuteArgs),
+    GetSinkVolume(BaseArgs),
     SetSinkVolume(SetVolumeArgs),
+
+    GetSourceMute(BaseArgs),
+    SetSourceMute(SetMuteArgs),
+    GetSourceVolume(BaseArgs),
+    SetSourceVolume(SetVolumeArgs),
     // TODO: others...
 }
 

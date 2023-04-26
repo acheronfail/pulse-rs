@@ -1,16 +1,18 @@
 use libpulse_binding::context::subscribe::Facility;
 
-use super::{PAIdent, PAServerInfo, VolumeReadings, VolumeSpec};
+use super::{PAIdent, PAServerInfo, PASinkInfo, PASourceInfo, VolumeReadings, VolumeSpec};
 
 #[derive(Debug)]
 pub enum PACommand {
     GetServerInfo,
 
+    GetSinkInfoList,
     GetSinkMute(PAIdent),
     GetSinkVolume(PAIdent),
     SetSinkMute(PAIdent, bool),
     SetSinkVolume(PAIdent, VolumeSpec),
 
+    GetSourceInfoList,
     GetSourceMute(PAIdent),
     GetSourceVolume(PAIdent),
     SetSourceMute(PAIdent, bool),
@@ -24,18 +26,22 @@ pub enum PACommand {
 
 #[derive(Debug)]
 pub enum PAEvent {
-    // Generic error event
+    /// Generic error event
     Error(String),
-
-    // Generic operation event
+    /// Generic operation event
     Complete(bool),
-
     // Subscription events
     SubscriptionNew(Facility, PAIdent),
     SubscriptionRemoved(Facility, PAIdent),
     SubscriptionChanged(Facility, PAIdent),
-
+    /// `PACommand::ListSinks` response
+    SinkInfoList(Vec<PASinkInfo>),
+    /// `PACommand::ListSinks` response
+    SourceInfoList(Vec<PASourceInfo>),
+    /// `PACommand::GetServerInfo` response
     ServerInfo(PAServerInfo),
-    Volume(PAIdent, VolumeReadings),
+    /// `PACommand::Get*Mute` response
     Mute(PAIdent, bool),
+    /// `PACommand::Get*Volume` response
+    Volume(PAIdent, VolumeReadings),
 }
