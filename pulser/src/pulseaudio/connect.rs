@@ -8,7 +8,14 @@ use std::thread;
 use libpulse_binding::callbacks::ListResult;
 use libpulse_binding::channelmap::Position;
 use libpulse_binding::context::introspect::{
-    CardInfo, ClientInfo, ModuleInfo, SampleInfo, SinkInfo, SinkInputInfo, SourceInfo, SourceOutputInfo
+    CardInfo,
+    ClientInfo,
+    ModuleInfo,
+    SampleInfo,
+    SinkInfo,
+    SinkInputInfo,
+    SourceInfo,
+    SourceOutputInfo,
 };
 use libpulse_binding::context::subscribe::{InterestMaskSet, Operation};
 use libpulse_binding::context::{Context, FlagSet, State};

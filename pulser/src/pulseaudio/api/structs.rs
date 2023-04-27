@@ -10,7 +10,18 @@
 //! TODO: these structs are currently missing any fields that are gated behind feature flags
 
 use libpulse_binding::context::introspect::{
-    CardInfo, CardPortInfo, ClientInfo, ModuleInfo, SampleInfo, ServerInfo, SinkInfo, SinkInputInfo, SinkPortInfo, SourceInfo, SourceOutputInfo, SourcePortInfo
+    CardInfo,
+    CardPortInfo,
+    ClientInfo,
+    ModuleInfo,
+    SampleInfo,
+    ServerInfo,
+    SinkInfo,
+    SinkInputInfo,
+    SinkPortInfo,
+    SourceInfo,
+    SourceOutputInfo,
+    SourcePortInfo,
 };
 use libpulse_binding::proplist::Proplist;
 use libpulse_binding::time::MicroSeconds;
