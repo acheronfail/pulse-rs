@@ -3,45 +3,28 @@ use std::str::FromStr;
 
 use libpulse_binding::channelmap::Position;
 use libpulse_binding::volume::{Volume, VolumeDB, VolumeLinear};
+use serde::Serialize;
+
+use super::{PAPosition, PAVolume};
 
 /// Used when requesting the volume from an object
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize)]
 pub struct VolumeReading {
     /// Which channel this volume belongs to
-    pub channel: Position,
-    pub(crate) volume: Volume,
+    pub channel: PAPosition,
+    pub(crate) volume: PAVolume,
 }
 
 impl VolumeReading {
     pub fn new(channel: &Position, volume: &Volume) -> VolumeReading {
         VolumeReading {
-            channel: *channel,
-            volume: *volume,
+            channel: PAPosition(*channel),
+            volume: PAVolume(*volume),
         }
-    }
-
-    /// Volume as a percentage; `0.0` is 0%, and `100.0` is 100%
-    pub fn percentage(&self) -> f64 {
-        (self.volume.0 as f64 / (Volume::NORMAL.0 as f64)) * 100.0
-    }
-
-    /// Volume as a linear factor
-    pub fn linear(&self) -> f64 {
-        VolumeLinear::from(self.volume).0
-    }
-
-    /// Volume in decibels
-    pub fn decibels(&self) -> f64 {
-        VolumeDB::from(self.volume).0
-    }
-
-    /// Volume actual value (`pa_volume_t`)
-    pub fn value(&self) -> u32 {
-        self.volume.0
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct VolumeReadings {
     pub(crate) inner: Vec<VolumeReading>,
 }

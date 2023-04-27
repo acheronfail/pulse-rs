@@ -52,6 +52,6 @@ pub fn new_channel_map(channels: Vec<Position>) -> Map {
 
 impl From<VolumeReadings> for ChannelVolumes {
     fn from(value: VolumeReadings) -> Self {
-        new_channel_volumes(value.inner.into_iter().map(|v| v.volume).collect())
+        new_channel_volumes(value.inner.into_iter().map(|v| v.volume.0).collect())
     }
 }

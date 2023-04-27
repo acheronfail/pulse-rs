@@ -1,4 +1,4 @@
-use libpulse_binding::context::subscribe::Facility;
+use serde::Serialize;
 
 use super::*;
 
@@ -22,25 +22,22 @@ pub enum PACommand {
     GetClientInfoList,
     GetModuleInfoList,
     GetSampleInfoList,
-    GetSinkInputList,
-    GetSourceOutputList,
+    GetSinkInputInfoList,
+    GetSourceOutputInfoList,
     // TODO: sink inputs & source outputs (mute & volume)
-    // TODO: modules
-    // TODO: cards
-    // TODO: list
-    // TODO: info for everything
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
 pub enum PAEvent {
     /// Generic error event
     Error(String),
     /// Generic operation event
     Complete(bool),
     // Subscription events
-    SubscriptionNew(Facility, PAIdent),
-    SubscriptionRemoved(Facility, PAIdent),
-    SubscriptionChanged(Facility, PAIdent),
+    SubscriptionNew(PAFacility, PAIdent),
+    SubscriptionRemoved(PAFacility, PAIdent),
+    SubscriptionChanged(PAFacility, PAIdent),
     /// `PACommand::GetServerInfo` response
     ServerInfo(PAServerInfo),
     /// `PACommand::GetSinkInfoList` response

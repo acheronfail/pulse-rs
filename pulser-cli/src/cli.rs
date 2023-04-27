@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use pulser::api::{PAIdent, PAVol, VolumeSpec};
+use serde::Serialize;
 
 #[derive(Debug, Parser)]
 pub struct Cli {
@@ -12,9 +13,7 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     Info,
-
-    // TODO: args for list, to filter on types
-    List,
+    List(ListArgs),
 
     GetSinkMute(BaseArgs),
     SetSinkMute(SetMuteArgs),
@@ -28,12 +27,26 @@ pub enum Command {
     // TODO: others...
 }
 
-pub trait ToPAIdent {
-    fn pa_ident(&self) -> PAIdent;
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum Kind {
+    Cards,
+    Clients,
+    Modules,
+    Samples,
+    Sinks,
+    SinkInputs,
+    Sources,
+    SourceOutputs,
 }
 
-pub trait ToVolumeSpec {
-    fn vol_spec(&self) -> VolumeSpec;
+#[derive(Debug, Args)]
+pub struct ListArgs {
+    // TODO: return CLI error if there are duplicates, currently not possible with clap
+    // see: https://github.com/clap-rs/clap/discussions/4863
+    /// Which objects you want to list. If you pass none, all objects will be listed.
+    #[arg(value_enum)]
+    pub kinds: Vec<Kind>,
 }
 
 #[derive(Debug, Args)]
@@ -45,9 +58,9 @@ pub struct BaseArgs {
     pub name: Option<String>,
 }
 
-impl ToPAIdent for BaseArgs {
-    fn pa_ident(&self) -> PAIdent {
-        match (self.index, &self.name) {
+impl From<&BaseArgs> for PAIdent {
+    fn from(value: &BaseArgs) -> Self {
+        match (value.index, &value.name) {
             (Some(idx), None) => PAIdent::Index(idx),
             (None, Some(name)) => PAIdent::Name(name.clone()),
             _ => unreachable!(),
@@ -55,7 +68,7 @@ impl ToPAIdent for BaseArgs {
     }
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Bool {
     Yes,
     No,
@@ -79,13 +92,13 @@ impl From<Bool> for bool {
 pub struct SetMuteArgs {
     #[clap(flatten)]
     pub base_args: BaseArgs,
-    #[command(subcommand)]
+    #[arg(value_enum)]
     pub mute: Bool,
 }
 
-impl ToPAIdent for SetMuteArgs {
-    fn pa_ident(&self) -> PAIdent {
-        self.base_args.pa_ident()
+impl From<&SetMuteArgs> for PAIdent {
+    fn from(value: &SetMuteArgs) -> Self {
+        (&value.base_args).into()
     }
 }
 
@@ -97,26 +110,26 @@ pub struct SetVolumeArgs {
     /// object. If more are provided, the number must match the number of channels of the object.
     /// Provide the volume, in one of the following formats:
     /// "<INT>" (integer), "<INT|FLOAT>%" (percentage), "<FLOAT>dB" (decibels) or "<FLOAT>L" (linear)
-    #[clap(required = true, num_args = 1.., value_parser = x)]
+    #[clap(required = true, num_args = 1.., value_parser = vol_from_str)]
     pub volumes: Vec<PAVol>,
 }
 
-impl ToPAIdent for SetVolumeArgs {
-    fn pa_ident(&self) -> PAIdent {
-        self.base_args.pa_ident()
+impl From<&SetVolumeArgs> for PAIdent {
+    fn from(value: &SetVolumeArgs) -> Self {
+        (&value.base_args).into()
     }
 }
 
-impl ToVolumeSpec for SetVolumeArgs {
-    fn vol_spec(&self) -> VolumeSpec {
-        match self.volumes.len() {
+impl From<&SetVolumeArgs> for VolumeSpec {
+    fn from(value: &SetVolumeArgs) -> VolumeSpec {
+        match value.volumes.len() {
             0 => unreachable!(),
-            1 => VolumeSpec::All(self.volumes[0]),
-            _ => VolumeSpec::Channels(self.volumes.clone()),
+            1 => VolumeSpec::All(value.volumes[0]),
+            _ => VolumeSpec::Channels(value.volumes.clone()),
         }
     }
 }
 
-fn x(s: &str) -> Result<PAVol, String> {
+fn vol_from_str(s: &str) -> Result<PAVol, String> {
     PAVol::from_str(s).map_err(|e| e.to_string())
 }
