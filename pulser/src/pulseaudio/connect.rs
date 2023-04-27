@@ -7,7 +7,9 @@ use std::thread;
 
 use libpulse_binding::callbacks::ListResult;
 use libpulse_binding::channelmap::Position;
-use libpulse_binding::context::introspect::{SinkInfo, SourceInfo};
+use libpulse_binding::context::introspect::{
+    CardInfo, ClientInfo, ModuleInfo, SampleInfo, SinkInfo, SinkInputInfo, SourceInfo, SourceOutputInfo
+};
 use libpulse_binding::context::subscribe::{InterestMaskSet, Operation};
 use libpulse_binding::context::{Context, FlagSet, State};
 use libpulse_binding::mainloop::threaded::Mainloop;
@@ -91,6 +93,18 @@ pub struct PulseAudio {
 }
 
 impl PulseAudio {
+    impl_call!(get_sink_info, SinkInfo);
+    impl_call!(get_source_info, SourceInfo);
+
+    impl_list_call!(get_sink_info_list, SinkInfo);
+    impl_list_call!(get_source_info_list, SourceInfo);
+    impl_list_call!(get_sink_input_info_list, SinkInputInfo);
+    impl_list_call!(get_source_output_info_list, SourceOutputInfo);
+    impl_list_call!(get_client_info_list, ClientInfo);
+    impl_list_call!(get_sample_info_list, SampleInfo);
+    impl_list_call!(get_card_info_list, CardInfo);
+    impl_list_call!(get_module_info_list, ModuleInfo);
+
     // TODO: tokio support???
     /// Sets up a connection to PulseAudio. PulseAudio uses a loop-based asynchronous API, and so
     /// when this is called, a background thread will be created to setup up a threaded loop API for
@@ -266,6 +280,13 @@ impl PulseAudio {
             PACommand::GetSourceVolume(id) => self.get_source_volume(id),
             PACommand::SetSourceMute(id, mute) => self.set_source_mute(id, mute),
             PACommand::SetSourceVolume(id, vol) => self.set_source_volume(id, vol),
+
+            PACommand::GetSinkInputList => self.get_sink_input_info_list(),
+            PACommand::GetSourceOutputList => self.get_source_output_info_list(),
+            PACommand::GetClientInfoList => self.get_client_info_list(),
+            PACommand::GetSampleInfoList => self.get_sample_info_list(),
+            PACommand::GetCardInfoList => self.get_card_info_list(),
+            PACommand::GetModuleInfoList => self.get_module_info_list(),
         }
     }
 
@@ -276,12 +297,6 @@ impl PulseAudio {
             tx.send(PAEvent::ServerInfo(info.into())).ignore();
         });
     }
-
-    impl_call!(get_sink_info, SinkInfo);
-    impl_call!(get_source_info, SourceInfo);
-
-    impl_list_call!(get_sink_info_list, SinkInfo);
-    impl_list_call!(get_source_info_list, SourceInfo);
 
     /*
      * Sinks

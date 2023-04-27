@@ -30,12 +30,39 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         List => {
+            tx.send(PACommand::GetCardInfoList)?;
+            tx.send(PACommand::GetClientInfoList)?;
+            tx.send(PACommand::GetModuleInfoList)?;
+            tx.send(PACommand::GetSampleInfoList)?;
             tx.send(PACommand::GetSinkInfoList)?;
+            tx.send(PACommand::GetSinkInputList)?;
             tx.send(PACommand::GetSourceInfoList)?;
+            tx.send(PACommand::GetSourceOutputList)?;
+            let cards = extract_unsafe!(rx.recv()?, PAEvent::CardInfoList(x) => x);
+            let clients = extract_unsafe!(rx.recv()?, PAEvent::ClientInfoList(x) => x);
+            let modules = extract_unsafe!(rx.recv()?, PAEvent::ModuleInfoList(x) => x);
+            let samples = extract_unsafe!(rx.recv()?, PAEvent::SampleInfoList(x) => x);
             let sinks = extract_unsafe!(rx.recv()?, PAEvent::SinkInfoList(x) => x);
+            let sink_inputs = extract_unsafe!(rx.recv()?, PAEvent::SinkInputInfoList(x) => x);
             let sources = extract_unsafe!(rx.recv()?, PAEvent::SourceInfoList(x) => x);
-            dbg!(sinks);
-            dbg!(sources);
+            let source_outputs = extract_unsafe!(rx.recv()?, PAEvent::SourceOutputInfoList(x) => x);
+
+            macro_rules! map {
+                ($val:expr) => {
+                    $val.iter()
+                        .map(|x| x.name.as_ref().unwrap())
+                        .collect::<Vec<_>>()
+                };
+            }
+
+            dbg!(map!(cards));
+            dbg!(map!(clients));
+            dbg!(map!(modules));
+            dbg!(map!(samples));
+            dbg!(map!(sink_inputs));
+            dbg!(map!(sinks));
+            dbg!(map!(source_outputs));
+            dbg!(map!(sources));
         }
 
         GetSinkMute(args) => {

@@ -1,6 +1,6 @@
 use libpulse_binding::context::subscribe::Facility;
 
-use super::{PAIdent, PAServerInfo, PASinkInfo, PASourceInfo, VolumeReadings, VolumeSpec};
+use super::*;
 
 #[derive(Debug)]
 pub enum PACommand {
@@ -17,6 +17,13 @@ pub enum PACommand {
     GetSourceVolume(PAIdent),
     SetSourceMute(PAIdent, bool),
     SetSourceVolume(PAIdent, VolumeSpec),
+
+    GetCardInfoList,
+    GetClientInfoList,
+    GetModuleInfoList,
+    GetSampleInfoList,
+    GetSinkInputList,
+    GetSourceOutputList,
     // TODO: sink inputs & source outputs (mute & volume)
     // TODO: modules
     // TODO: cards
@@ -34,12 +41,24 @@ pub enum PAEvent {
     SubscriptionNew(Facility, PAIdent),
     SubscriptionRemoved(Facility, PAIdent),
     SubscriptionChanged(Facility, PAIdent),
-    /// `PACommand::ListSinks` response
-    SinkInfoList(Vec<PASinkInfo>),
-    /// `PACommand::ListSinks` response
-    SourceInfoList(Vec<PASourceInfo>),
     /// `PACommand::GetServerInfo` response
     ServerInfo(PAServerInfo),
+    /// `PACommand::GetSinkInfoList` response
+    SinkInfoList(Vec<PASinkInfo>),
+    /// `PACommand::GetSourceInfoList` response
+    SourceInfoList(Vec<PASourceInfo>),
+    /// `PACommand::GetSinkInputList` response
+    SinkInputInfoList(Vec<PASinkInputInfo>),
+    /// `PACommand::GetSourceOutputList` response
+    SourceOutputInfoList(Vec<PASourceOutputInfo>),
+    /// `PACommand::GetClientInfoList` response
+    ClientInfoList(Vec<PAClientInfo>),
+    /// `PACommand::SampleInfoList` response
+    SampleInfoList(Vec<PASampleInfo>),
+    /// `PACommand::CardInfoList` response
+    CardInfoList(Vec<PACardInfo>),
+    /// `PACommand::ModuleInfoList` response
+    ModuleInfoList(Vec<PAModuleInfo>),
     /// `PACommand::Get*Mute` response
     Mute(PAIdent, bool),
     /// `PACommand::Get*Volume` response
