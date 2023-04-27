@@ -1,6 +1,5 @@
-#![feature(never_type)]
-
 mod ignore;
 mod pulseaudio;
+pub mod simple;
 
 pub use pulseaudio::*;

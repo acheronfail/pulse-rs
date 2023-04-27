@@ -24,6 +24,8 @@ pub enum PACommand {
     GetSampleInfoList,
     GetSinkInputInfoList,
     GetSourceOutputInfoList,
+
+    Disconnect,
     // TODO: sink inputs & source outputs (mute & volume)
 }
 
@@ -33,7 +35,7 @@ pub enum PAEvent {
     /// Generic error event
     Error(String),
     /// Generic operation event
-    Complete(bool),
+    Complete,
     // Subscription events
     SubscriptionNew(PAFacility, PAIdent),
     SubscriptionRemoved(PAFacility, PAIdent),
@@ -60,4 +62,8 @@ pub enum PAEvent {
     Mute(PAIdent, bool),
     /// `PACommand::Get*Volume` response
     Volume(PAIdent, VolumeReadings),
+    /// `PACommand::Disconnect` response.
+    /// Once this is received, no other `PACommand`s should be sent, since the
+    /// receiver will have been dropped.
+    Disconnected,
 }

@@ -92,14 +92,20 @@ macro_rules! impl_list_call {
     };
 }
 
-pub struct PulseAudio {
+#[derive(Debug, Clone, Copy)]
+pub enum StopReason {
+    CommandSenderDropped,
+    ExplicitDisconnect,
+}
+
+pub struct PulseAudioLoop {
     rx: Receiver<PACommand>,
     tx: Sender<PAEvent>,
     ctx: Rc<RefCell<Context>>,
     mainloop: Rc<RefCell<Mainloop>>,
 }
 
-impl PulseAudio {
+impl PulseAudioLoop {
     impl_call!(get_sink_info, SinkInfo);
     impl_call!(get_source_info, SourceInfo);
 
@@ -119,7 +125,7 @@ impl PulseAudio {
     ///
     /// If the `Receiver<PAEvent>` is dropped, then this will shut down PulseAudio's loop and clean
     /// up.
-    pub fn connect(
+    pub fn start(
         app_name: impl AsRef<str> + Send + 'static,
     ) -> (Sender<PACommand>, Receiver<PAEvent>) {
         let (result_tx, result_rx) = mpsc::channel();
@@ -127,14 +133,20 @@ impl PulseAudio {
 
         // Run pulseaudio loop in background thread
         thread::spawn(move || {
-            let pa = match PulseAudio::init(app_name.as_ref(), result_tx, cmd_rx) {
+            let pa = match PulseAudioLoop::init(app_name.as_ref(), result_tx.clone(), cmd_rx) {
                 Ok(pa) => pa,
                 Err(e) => panic!("An error occurred while connecting to pulseaudio: {}", e),
             };
 
-            if let Err(e) = pa.start_loop() {
-                panic!("An error occurred while interfacing with pulseaudio: {}", e);
+            match pa.start_loop() {
+                Ok(reason) => match reason {
+                    StopReason::CommandSenderDropped | StopReason::ExplicitDisconnect => {}
+                },
+                Err(e) => panic!("An error occurred while interfacing with pulseaudio: {}", e),
             }
+
+            // Signal that we're done
+            result_tx.send(PAEvent::Disconnected).ignore();
         });
 
         (cmd_tx, result_rx)
@@ -147,7 +159,7 @@ impl PulseAudio {
         with_app_name: impl AsRef<str>,
         tx: Sender<PAEvent>,
         rx: Receiver<PACommand>,
-    ) -> Result<PulseAudio, Box<dyn Error>> {
+    ) -> Result<PulseAudioLoop, Box<dyn Error>> {
         let app_name = with_app_name.as_ref();
 
         let mut proplist = Proplist::new().ok_or("Failed to create PulseAudio Proplist")?;
@@ -234,7 +246,7 @@ impl PulseAudio {
 
         mainloop.borrow_mut().unlock();
 
-        Ok(PulseAudio {
+        Ok(PulseAudioLoop {
             tx,
             rx,
             ctx,
@@ -242,15 +254,14 @@ impl PulseAudio {
         })
     }
 
-    pub fn start_loop(&self) -> Result<!, Box<dyn Error>> {
+    pub fn start_loop(&self) -> Result<StopReason, Box<dyn Error>> {
         loop {
             // wait for our next command
             let cmd = match self.rx.recv() {
                 Ok(cmd) => cmd,
                 Err(_) => {
-                    self.mainloop.borrow_mut().unlock();
                     self.mainloop.borrow_mut().stop();
-                    return Err("Command sender was closed, shutting down".into());
+                    return Ok(StopReason::CommandSenderDropped);
                 }
             };
 
@@ -266,35 +277,37 @@ impl PulseAudio {
                 }
             }
 
-            self.handle_cmd(cmd);
+            match cmd {
+                PACommand::GetServerInfo => self.get_server_info(),
+
+                PACommand::GetSinkInfoList => self.get_sink_info_list(),
+                PACommand::GetSinkMute(id) => self.get_sink_mute(id),
+                PACommand::GetSinkVolume(id) => self.get_sink_volume(id),
+                PACommand::SetSinkMute(id, mute) => self.set_sink_mute(id, mute),
+                PACommand::SetSinkVolume(id, vol) => self.set_sink_volume(id, vol),
+
+                PACommand::GetSourceInfoList => self.get_source_info_list(),
+                PACommand::GetSourceMute(id) => self.get_source_mute(id),
+                PACommand::GetSourceVolume(id) => self.get_source_volume(id),
+                PACommand::SetSourceMute(id, mute) => self.set_source_mute(id, mute),
+                PACommand::SetSourceVolume(id, vol) => self.set_source_volume(id, vol),
+
+                PACommand::GetSinkInputInfoList => self.get_sink_input_info_list(),
+                PACommand::GetSourceOutputInfoList => self.get_source_output_info_list(),
+                PACommand::GetClientInfoList => self.get_client_info_list(),
+                PACommand::GetSampleInfoList => self.get_sample_info_list(),
+                PACommand::GetCardInfoList => self.get_card_info_list(),
+                PACommand::GetModuleInfoList => self.get_module_info_list(),
+
+                PACommand::Disconnect => {
+                    self.mainloop.borrow_mut().unlock();
+                    self.mainloop.borrow_mut().stop();
+                    return Ok(StopReason::ExplicitDisconnect);
+                }
+            }
 
             // resume mainloop
             self.mainloop.borrow_mut().unlock();
-        }
-    }
-
-    fn handle_cmd(&self, cmd: PACommand) {
-        match cmd {
-            PACommand::GetServerInfo => self.get_server_info(),
-
-            PACommand::GetSinkInfoList => self.get_sink_info_list(),
-            PACommand::GetSinkMute(id) => self.get_sink_mute(id),
-            PACommand::GetSinkVolume(id) => self.get_sink_volume(id),
-            PACommand::SetSinkMute(id, mute) => self.set_sink_mute(id, mute),
-            PACommand::SetSinkVolume(id, vol) => self.set_sink_volume(id, vol),
-
-            PACommand::GetSourceInfoList => self.get_source_info_list(),
-            PACommand::GetSourceMute(id) => self.get_source_mute(id),
-            PACommand::GetSourceVolume(id) => self.get_source_volume(id),
-            PACommand::SetSourceMute(id, mute) => self.set_source_mute(id, mute),
-            PACommand::SetSourceVolume(id, vol) => self.set_source_volume(id, vol),
-
-            PACommand::GetSinkInputInfoList => self.get_sink_input_info_list(),
-            PACommand::GetSourceOutputInfoList => self.get_source_output_info_list(),
-            PACommand::GetClientInfoList => self.get_client_info_list(),
-            PACommand::GetSampleInfoList => self.get_sample_info_list(),
-            PACommand::GetCardInfoList => self.get_card_info_list(),
-            PACommand::GetModuleInfoList => self.get_module_info_list(),
         }
     }
 
@@ -452,7 +465,7 @@ impl PulseAudio {
             if !success {
                 Self::handle_error(&ctx, &tx)
             } else {
-                tx.send(PAEvent::Complete(success)).ignore();
+                tx.send(PAEvent::Complete).ignore();
             }
         })
     }

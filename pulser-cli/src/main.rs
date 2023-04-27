@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 use std::error::Error;
 
 use clap::{Parser, ValueEnum};
-use pulser::api::*;
-use pulser::connect::PulseAudio;
+use pulser::simple::PulseAudio;
+use serde_json::{to_value, Value};
 
 use crate::cli::Command::*;
 use crate::cli::{Cli, Kind};
@@ -19,11 +19,10 @@ macro_rules! json_print {
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Cli::parse();
 
-    let (tx, rx) = PulseAudio::connect("pulser");
+    let pa = PulseAudio::connect();
     match args.command {
         Info => {
-            tx.send(PACommand::GetServerInfo)?;
-            json_print!(rx.recv()?);
+            json_print!(pa.get_server_info()?);
         }
         List(args) => {
             // unfortunately can't dedup with clap, so we do that here and silently ignore duplicates
@@ -40,55 +39,49 @@ fn main() -> Result<(), Box<dyn Error>> {
             // collect into a `BTreeMap` to have it sorted by key
             let map = kinds
                 .into_iter()
-                .map(|k| {
-                    tx.send(match k {
-                        Kind::Cards => PACommand::GetCardInfoList,
-                        Kind::Clients => PACommand::GetClientInfoList,
-                        Kind::Modules => PACommand::GetModuleInfoList,
-                        Kind::Samples => PACommand::GetSampleInfoList,
-                        Kind::Sinks => PACommand::GetSinkInfoList,
-                        Kind::SinkInputs => PACommand::GetSinkInputInfoList,
-                        Kind::Sources => PACommand::GetSourceInfoList,
-                        Kind::SourceOutputs => PACommand::GetSourceOutputInfoList,
-                    })
-                    .unwrap();
-                    (k, rx.recv().unwrap())
+                .map(|k| -> Result<(Kind, Value), Box<dyn Error>> {
+                    Ok((
+                        k,
+                        match k {
+                            Kind::Cards => to_value(pa.get_card_info_list()?)?,
+                            Kind::Clients => to_value(pa.get_client_info_list()?)?,
+                            Kind::Modules => to_value(pa.get_module_info_list()?)?,
+                            Kind::Samples => to_value(pa.get_sample_info_list()?)?,
+                            Kind::Sinks => to_value(pa.get_sink_info_list()?)?,
+                            Kind::SinkInputs => to_value(pa.get_sink_input_info_list()?)?,
+                            Kind::Sources => to_value(pa.get_source_info_list()?)?,
+                            Kind::SourceOutputs => to_value(pa.get_source_output_info_list()?)?,
+                        },
+                    ))
                 })
-                .collect::<BTreeMap<Kind, PAEvent>>();
+                .collect::<Result<BTreeMap<Kind, _>, _>>()
+                .unwrap();
 
             json_print!(map);
         }
         GetSinkMute(args) => {
-            tx.send(PACommand::GetSinkMute((&args).into()))?;
-            json_print!(rx.recv()?);
+            json_print!(pa.get_sink_mute((&args).into())?);
         }
         GetSinkVolume(args) => {
-            tx.send(PACommand::GetSinkVolume((&args).into()))?;
-            json_print!(rx.recv()?);
+            json_print!(pa.get_sink_volume((&args).into())?);
         }
         SetSinkMute(args) => {
-            tx.send(PACommand::SetSinkMute((&args).into(), args.mute.into()))?;
-            json_print!(rx.recv()?);
+            json_print!(pa.set_sink_mute((&args).into(), args.mute.into())?);
         }
         SetSinkVolume(args) => {
-            tx.send(PACommand::SetSinkVolume((&args).into(), (&args).into()))?;
-            json_print!(rx.recv()?);
+            json_print!(pa.set_sink_volume((&args).into(), (&args).into())?);
         }
         GetSourceMute(args) => {
-            tx.send(PACommand::GetSourceMute((&args).into()))?;
-            json_print!(rx.recv()?);
+            json_print!(pa.get_source_mute((&args).into())?);
         }
         GetSourceVolume(args) => {
-            tx.send(PACommand::GetSourceVolume((&args).into()))?;
-            json_print!(rx.recv()?);
+            json_print!(pa.get_source_volume((&args).into())?);
         }
         SetSourceMute(args) => {
-            tx.send(PACommand::SetSourceMute((&args).into(), args.mute.into()))?;
-            json_print!(rx.recv()?);
+            json_print!(pa.set_source_mute((&args).into(), args.mute.into())?);
         }
         SetSourceVolume(args) => {
-            tx.send(PACommand::SetSourceVolume((&args).into(), (&args).into()))?;
-            json_print!(rx.recv()?);
+            json_print!(pa.set_source_volume((&args).into(), (&args).into())?);
         }
     };
 

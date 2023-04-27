@@ -273,7 +273,6 @@ dependencies = [
  "libpulse-sys",
  "paste",
  "serde",
- "serde_json",
 ]
 
 [[package]]
