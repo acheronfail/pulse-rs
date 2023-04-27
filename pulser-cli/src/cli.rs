@@ -10,19 +10,31 @@ pub struct Cli {
     pub command: Command,
 }
 
+// TODO: think about a nice API for this... right now I'm just implementing things here
+// as a way to help me implement more commands in the crate's library
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Get server information
     Info,
+    /// List objects from the server
     List(ListArgs),
 
+    /// Check if a sink is muted
     GetSinkMute(BaseArgs),
+    /// Mute a sink
     SetSinkMute(SetMuteArgs),
+    /// Get the volume from a sink
     GetSinkVolume(BaseArgs),
+    /// Set the volume(s) for a sink
     SetSinkVolume(SetVolumeArgs),
 
+    /// Check if a source is muted
     GetSourceMute(BaseArgs),
+    /// Mute a source
     SetSourceMute(SetMuteArgs),
+    /// Get the volume from a source
     GetSourceVolume(BaseArgs),
+    /// Set the volume(s) for a source
     SetSourceVolume(SetVolumeArgs),
     // TODO: others...
 }
