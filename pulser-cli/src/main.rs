@@ -1,10 +1,9 @@
 mod cli;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::error::Error;
 
 use clap::{Parser, ValueEnum};
-use itertools::Itertools;
 use pulser::api::*;
 use pulser::connect::PulseAudio;
 
@@ -27,16 +26,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             json_print!(rx.recv()?);
         }
         List(args) => {
-            // unfortunately can't dedup with clap, and using `Vec::dedup` requires
-            // sorting the list, which we don't want to do here (since it's nice to retain
-            // the order given on the command line)
-            let kinds: Vec<Kind> = args.kinds.into_iter().unique().collect();
+            // unfortunately can't dedup with clap, so we do that here and silently ignore duplicates
+            let mut kinds = args.kinds;
+            kinds.sort();
+            kinds.dedup();
+
             let kinds = if kinds.len() == 0 {
                 Kind::value_variants().to_vec()
             } else {
                 kinds
             };
 
+            // collect into a `BTreeMap` to have it sorted by key
             let map = kinds
                 .into_iter()
                 .map(|k| {
@@ -53,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .unwrap();
                     (k, rx.recv().unwrap())
                 })
-                .collect::<HashMap<Kind, PAEvent>>();
+                .collect::<BTreeMap<Kind, PAEvent>>();
 
             json_print!(map);
         }
