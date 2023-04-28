@@ -137,8 +137,8 @@ impl PulseAudio {
 
     fn operation_result(&self) -> Result<OperationResult> {
         match self.rx_resp.recv()? {
-            PAResponse::Complete => Ok(OperationResult::Success),
-            PAResponse::Error(e) => Ok(OperationResult::Failure { error: e }),
+            PAResponse::OpComplete => Ok(OperationResult::Success),
+            PAResponse::OpError(e) => Ok(OperationResult::Failure { error: e }),
             ev => Err(format!("Unexpected response received {:?}", ev).into()),
         }
     }

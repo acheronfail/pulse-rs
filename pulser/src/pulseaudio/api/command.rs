@@ -31,10 +31,10 @@ pub enum PACommand {
     Disconnect,
     // TODO: sink inputs & source outputs (mute & volume)
 }
+/// Subscription events
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 pub enum PAEvent {
-    // Subscription events
     SubscriptionNew(PAFacility, PAIdent),
     SubscriptionRemoved(PAFacility, PAIdent),
     SubscriptionChanged(PAFacility, PAIdent),
@@ -43,32 +43,34 @@ pub enum PAEvent {
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 pub enum PAResponse {
-    /// Generic error event
-    Error(String),
-    /// Generic operation event
-    Complete,
-    /// `PACommand::GetServerInfo` response
-    ServerInfo(PAServerInfo),
-    /// `PACommand::GetSinkInfoList` response
-    SinkInfoList(Vec<PASinkInfo>),
-    /// `PACommand::GetSourceInfoList` response
-    SourceInfoList(Vec<PASourceInfo>),
-    /// `PACommand::GetSinkInputList` response
-    SinkInputInfoList(Vec<PASinkInputInfo>),
-    /// `PACommand::GetSourceOutputList` response
-    SourceOutputInfoList(Vec<PASourceOutputInfo>),
-    /// `PACommand::GetClientInfoList` response
-    ClientInfoList(Vec<PAClientInfo>),
-    /// `PACommand::SampleInfoList` response
-    SampleInfoList(Vec<PASampleInfo>),
+    /// Returned when an operation succeeded (such as setting mute/volume, or starting a subscription)
+    OpComplete,
+    /// Returned when an operation failed (such as setting mute/volume, or starting a subscription)
+    OpError(String),
+
     /// `PACommand::CardInfoList` response
     CardInfoList(Vec<PACardInfo>),
+    /// `PACommand::GetClientInfoList` response
+    ClientInfoList(Vec<PAClientInfo>),
     /// `PACommand::ModuleInfoList` response
     ModuleInfoList(Vec<PAModuleInfo>),
     /// `PACommand::Get*Mute` response
     Mute(PAIdent, bool),
+    /// `PACommand::SampleInfoList` response
+    SampleInfoList(Vec<PASampleInfo>),
+    /// `PACommand::GetServerInfo` response
+    ServerInfo(PAServerInfo),
+    /// `PACommand::GetSinkInfoList` response
+    SinkInfoList(Vec<PASinkInfo>),
+    /// `PACommand::GetSinkInputList` response
+    SinkInputInfoList(Vec<PASinkInputInfo>),
+    /// `PACommand::GetSourceInfoList` response
+    SourceInfoList(Vec<PASourceInfo>),
+    /// `PACommand::GetSourceOutputList` response
+    SourceOutputInfoList(Vec<PASourceOutputInfo>),
     /// `PACommand::Get*Volume` response
     Volume(PAIdent, VolumeReadings),
+
     /// `PACommand::Disconnect` response.
     /// Once this is received, no other `PACommand`s should be sent, since the
     /// receiver will have been dropped.

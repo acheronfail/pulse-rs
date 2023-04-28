@@ -57,7 +57,7 @@ macro_rules! impl_call {
                     match result {
                         // The result we wanted, act on it
                         ListResult::Item(inner) => if let Err(e) = (&mut f)(ident.clone(), ctx.clone(), inner) {
-                            tx.send(PAResponse::Error(e.to_string())).ignore();
+                            tx.send(PAResponse::OpError(e.to_string())).ignore();
                         },
                         // An error occurred, check it and send an error event
                         ListResult::Error => Self::handle_error(&ctx, &tx),
@@ -479,14 +479,14 @@ impl PulseAudioLoop {
             if !success {
                 Self::handle_error(&ctx, &tx)
             } else {
-                tx.send(PAResponse::Complete).ignore();
+                tx.send(PAResponse::OpComplete).ignore();
             }
         })
     }
 
     fn handle_error(ctx: &Ctx, tx: &Sender<PAResponse>) {
         let err = ctx.borrow_mut().errno().to_string();
-        tx.send(PAResponse::Error(format!(
+        tx.send(PAResponse::OpError(format!(
             "Operation failed: {}",
             err.unwrap_or("An unknown error occurred".into())
         )))
