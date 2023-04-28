@@ -2,6 +2,8 @@ use std::error::Error;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
 
+use serde::Serialize;
+
 use crate::api::*;
 use crate::mainloop::PulseAudioLoop;
 use crate::sender::EventSender;
@@ -13,6 +15,13 @@ macro_rules! extract_unsafe {
             ev => Err(format!("Expected {} but received {:?}", stringify!($pattern), ev).into()),
         }
     };
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum OperationResult {
+    Success,
+    Failure { error: String },
 }
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -36,10 +45,9 @@ impl PulseAudio {
         PulseAudio { tx, rx_resp }
     }
 
-    pub fn subscribe(&self, mask: PAMask, tx: Box<dyn EventSender>) -> Result<()> {
+    pub fn subscribe(&self, mask: PAMask, tx: Box<dyn EventSender>) -> Result<OperationResult> {
         self.tx.send(PACommand::Subscribe(mask, tx))?;
-        assert!(matches!(self.rx_resp.recv()?, PAResponse::Complete));
-        Ok(())
+        self.operation_result()
     }
 
     pub fn get_server_info(&self) -> Result<PAServerInfo> {
@@ -97,14 +105,14 @@ impl PulseAudio {
         extract_unsafe!(self.rx_resp.recv()?, PAResponse::Volume(_, x) => x)
     }
 
-    pub fn set_sink_mute(&self, id: PAIdent, mute: bool) -> Result<()> {
+    pub fn set_sink_mute(&self, id: PAIdent, mute: bool) -> Result<OperationResult> {
         self.tx.send(PACommand::SetSinkMute(id, mute))?;
-        extract_unsafe!(self.rx_resp.recv()?, PAResponse::Complete => ())
+        self.operation_result()
     }
 
-    pub fn set_sink_volume(&self, id: PAIdent, vol: VolumeSpec) -> Result<()> {
+    pub fn set_sink_volume(&self, id: PAIdent, vol: VolumeSpec) -> Result<OperationResult> {
         self.tx.send(PACommand::SetSinkVolume(id, vol))?;
-        extract_unsafe!(self.rx_resp.recv()?, PAResponse::Complete => ())
+        self.operation_result()
     }
 
     pub fn get_source_mute(&self, id: PAIdent) -> Result<bool> {
@@ -117,14 +125,22 @@ impl PulseAudio {
         extract_unsafe!(self.rx_resp.recv()?, PAResponse::Volume(_, x) => x)
     }
 
-    pub fn set_source_mute(&self, id: PAIdent, mute: bool) -> Result<()> {
+    pub fn set_source_mute(&self, id: PAIdent, mute: bool) -> Result<OperationResult> {
         self.tx.send(PACommand::SetSourceMute(id, mute))?;
-        extract_unsafe!(self.rx_resp.recv()?, PAResponse::Complete => ())
+        self.operation_result()
     }
 
-    pub fn set_source_volume(&self, id: PAIdent, vol: VolumeSpec) -> Result<()> {
+    pub fn set_source_volume(&self, id: PAIdent, vol: VolumeSpec) -> Result<OperationResult> {
         self.tx.send(PACommand::SetSourceVolume(id, vol))?;
-        extract_unsafe!(self.rx_resp.recv()?,PAResponse::Complete => ())
+        self.operation_result()
+    }
+
+    fn operation_result(&self) -> Result<OperationResult> {
+        match self.rx_resp.recv()? {
+            PAResponse::Complete => Ok(OperationResult::Success),
+            PAResponse::Error(e) => Ok(OperationResult::Failure { error: e }),
+            ev => Err(format!("Unexpected response received {:?}", ev).into()),
+        }
     }
 }
 
