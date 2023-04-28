@@ -20,6 +20,10 @@ pub enum Command {
     GetDefaultSink,
     /// Get the default source (if any)
     GetDefaultSource,
+    /// Get the default sink (if any)
+    SetDefaultSink(BaseArgs),
+    /// Get the default source (if any)
+    SetDefaultSource(BaseArgs),
 
     /// List objects from the server
     List(ListArgs),

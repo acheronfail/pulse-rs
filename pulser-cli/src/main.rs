@@ -29,6 +29,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         GetDefaultSink => json_print!(pa.get_default_sink()?),
         GetDefaultSource => json_print!(pa.get_default_source()?),
+        SetDefaultSink(args) => json_print!(pa.set_default_sink((&args).into())?),
+        SetDefaultSource(args) => json_print!(pa.set_default_source((&args).into())?),
 
         List(args) => {
             // unfortunately can't dedup with clap, so we do that here and silently ignore duplicates

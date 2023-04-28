@@ -59,9 +59,19 @@ impl PulseAudio {
         extract_unsafe!(self.rx_resp.recv()?, PAResponse::DefaultSink(x) => x)
     }
 
+    pub fn set_default_sink(&self, id: PAIdent) -> Result<OperationResult> {
+        self.tx.send(PACommand::SetDefaultSink(id))?;
+        self.operation_result()
+    }
+
     pub fn get_default_source(&self) -> Result<Option<PAIdent>> {
         self.tx.send(PACommand::GetDefaultSource)?;
         extract_unsafe!(self.rx_resp.recv()?, PAResponse::DefaultSource(x) => x)
+    }
+
+    pub fn set_default_source(&self, id: PAIdent) -> Result<OperationResult> {
+        self.tx.send(PACommand::SetDefaultSource(id))?;
+        self.operation_result()
     }
 
     /*

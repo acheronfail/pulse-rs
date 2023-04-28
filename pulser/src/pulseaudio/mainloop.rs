@@ -256,6 +256,8 @@ impl PulseAudioLoop {
                 PACommand::GetServerInfo => self.get_server_info(),
                 PACommand::GetDefaultSink => self.get_default_sink(),
                 PACommand::GetDefaultSource => self.get_default_source(),
+                PACommand::SetDefaultSink(id) => self.set_default_sink(id),
+                PACommand::SetDefaultSource(id) => self.set_default_source(id),
 
                 PACommand::GetSinkInfoList => self.get_sink_info_list(),
                 PACommand::GetSinkMute(id) => self.get_sink_mute(id),
@@ -321,6 +323,30 @@ impl PulseAudioLoop {
         });
     }
 
+    fn set_default_sink(&self, ident: PAIdent) {
+        match ident {
+            // if the identifier is a name, just set the default
+            PAIdent::Name(name) => {
+                self.ctx
+                    .borrow_mut()
+                    .set_default_sink(&name, Self::success_cb(self.ctx.clone(), self.tx.clone()));
+            }
+            // but if it's an index, first find the index, and then set the default
+            PAIdent::Index(idx) => {
+                let tx = self.tx.clone();
+                self.get_sink_info(ident, move |_, ctx, info| {
+                    info.name
+                        .as_ref()
+                        .map(|name| {
+                            ctx.borrow_mut()
+                                .set_default_sink(&name, Self::success_cb(ctx.clone(), tx.clone()));
+                        })
+                        .ok_or_else(|| format!("Failed to find sink with id: {}", idx).into())
+                })
+            }
+        }
+    }
+
     fn get_default_source(&self) {
         let tx = self.tx.clone();
         self.with_server_info(move |info| {
@@ -331,6 +357,32 @@ impl PulseAudioLoop {
             ))
             .ignore();
         });
+    }
+
+    fn set_default_source(&self, ident: PAIdent) {
+        match ident {
+            // if the identifier is a name, just set the default
+            PAIdent::Name(name) => {
+                self.ctx
+                    .borrow_mut()
+                    .set_default_source(&name, Self::success_cb(self.ctx.clone(), self.tx.clone()));
+            }
+            // but if it's an index, first find the index, and then set the default
+            PAIdent::Index(idx) => {
+                let tx = self.tx.clone();
+                self.get_source_info(ident, move |_, ctx, info| {
+                    info.name
+                        .as_ref()
+                        .map(|name| {
+                            ctx.borrow_mut().set_default_source(
+                                &name,
+                                Self::success_cb(ctx.clone(), tx.clone()),
+                            );
+                        })
+                        .ok_or_else(|| format!("Failed to find source with id: {}", idx).into())
+                })
+            }
+        }
     }
 
     /*

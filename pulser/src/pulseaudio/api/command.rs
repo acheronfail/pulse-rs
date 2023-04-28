@@ -9,6 +9,8 @@ pub enum PACommand {
 
     GetDefaultSink,
     GetDefaultSource,
+    SetDefaultSink(PAIdent),
+    SetDefaultSource(PAIdent),
 
     GetSinkMute(PAIdent),
     GetSinkVolume(PAIdent),
@@ -33,7 +35,6 @@ pub enum PACommand {
     Subscribe(PAMask, Box<dyn EventSender>),
 
     Disconnect,
-    // TODO: set default sink/source
     // TODO: move sink-input/source-output
     // TODO: set sink-input/source-output mute
     // TODO: set sink-input/source-output volume
