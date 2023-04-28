@@ -1,15 +1,18 @@
 mod cli;
+mod subscribe;
 
 use std::collections::BTreeMap;
 use std::error::Error;
 
 use clap::{Parser, ValueEnum};
+use pulser::api::PAMask;
 use pulser::simple::PulseAudio;
 use serde_json::{to_value, Value};
 
 use crate::cli::Command::*;
 use crate::cli::{Cli, Kind};
 
+#[macro_export]
 macro_rules! json_print {
     ($x:expr) => {
         println!("{}", serde_json::to_string(&$x)?);
@@ -19,7 +22,7 @@ macro_rules! json_print {
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Cli::parse();
 
-    let pa = PulseAudio::connect();
+    let pa = PulseAudio::connect(Some("PulserCli"));
     match args.command {
         Info => {
             json_print!(pa.get_server_info()?);
@@ -82,6 +85,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         SetSourceVolume(args) => {
             json_print!(pa.set_source_volume((&args).into(), (&args).into())?);
+        }
+        Subscribe(args) => {
+            let mut mask = PAMask::empty();
+            for kind in args.kinds {
+                mask.insert(match kind {
+                    Kind::Cards => PAMask::CARD,
+                    Kind::Clients => PAMask::CLIENT,
+                    Kind::Modules => PAMask::MODULE,
+                    Kind::Samples => PAMask::SAMPLE_CACHE,
+                    Kind::Sinks => PAMask::SINK,
+                    Kind::SinkInputs => PAMask::SINK_INPUT,
+                    Kind::Sources => PAMask::SOURCE,
+                    Kind::SourceOutputs => PAMask::SOURCE_OUTPUT,
+                });
+            }
+
+            subscribe::subscribe(pa, mask)?;
         }
     };
 

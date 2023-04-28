@@ -25,6 +25,7 @@ use libpulse_binding::context::introspect::{
     SourcePortInfo,
 };
 use libpulse_binding::context::subscribe::Facility;
+pub use libpulse_binding::context::subscribe::InterestMaskSet as PAMask;
 use libpulse_binding::proplist::Proplist;
 use libpulse_binding::time::MicroSeconds;
 use libpulse_binding::volume::{ChannelVolumes, Volume, VolumeDB, VolumeLinear};

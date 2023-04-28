@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::ops::Deref;
 use std::rc::Rc;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, SendError, Sender};
 use std::thread;
 
 use libpulse_binding::callbacks::ListResult;
@@ -17,7 +17,7 @@ use libpulse_binding::context::introspect::{
     SourceInfo,
     SourceOutputInfo,
 };
-use libpulse_binding::context::subscribe::{InterestMaskSet, Operation};
+use libpulse_binding::context::subscribe::Operation;
 use libpulse_binding::context::{Context, FlagSet, State};
 use libpulse_binding::mainloop::threaded::Mainloop;
 use libpulse_binding::proplist::{properties, Proplist};
@@ -27,6 +27,7 @@ use super::api::*;
 use super::util::updated_channel_volumes;
 use crate::ignore::Ignore;
 use crate::pulseaudio::api::VolumeReading;
+use crate::sender::EventSender;
 
 type Ctx = Rc<RefCell<Context>>;
 type Res = Result<(), Box<dyn Error>>;
@@ -56,7 +57,7 @@ macro_rules! impl_call {
                     match result {
                         // The result we wanted, act on it
                         ListResult::Item(inner) => if let Err(e) = (&mut f)(ident.clone(), ctx.clone(), inner) {
-                            tx.send(PAEvent::Error(e.to_string())).ignore();
+                            tx.send(PAResponse::Error(e.to_string())).ignore();
                         },
                         // An error occurred, check it and send an error event
                         ListResult::Error => Self::handle_error(&ctx, &tx),
@@ -82,7 +83,7 @@ macro_rules! impl_list_call {
                         // Called for each item in the list
                         ListResult::Item(info) => v.push([<PA $ty>]::from(info)),
                         // Called at the end of the iteration, send the event back
-                        ListResult::End => tx.send(PAEvent::[<$ty List>](v.clone())).ignore(),
+                        ListResult::End => tx.send(PAResponse::[<$ty List>](v.clone())).ignore(),
                         // An error occurred, check it and send an error event
                         ListResult::Error => Self::handle_error(&ctx, &tx),
                     };
@@ -100,7 +101,7 @@ pub enum StopReason {
 
 pub struct PulseAudioLoop {
     rx: Receiver<PACommand>,
-    tx: Sender<PAEvent>,
+    tx: Sender<PAResponse>,
     ctx: Rc<RefCell<Context>>,
     mainloop: Rc<RefCell<Mainloop>>,
 }
@@ -123,17 +124,17 @@ impl PulseAudioLoop {
     /// when this is called, a background thread will be created to setup up a threaded loop API for
     /// PulseAudio.
     ///
-    /// If the `Receiver<PAEvent>` is dropped, then this will shut down PulseAudio's loop and clean
+    /// If the `Receiver<PAResponse>` is dropped, then this will shut down PulseAudio's loop and clean
     /// up.
     pub fn start(
         app_name: impl AsRef<str> + Send + 'static,
-    ) -> (Sender<PACommand>, Receiver<PAEvent>) {
-        let (result_tx, result_rx) = mpsc::channel();
+    ) -> (Sender<PACommand>, Receiver<PAResponse>) {
+        let (response_tx, response_rx) = mpsc::channel();
         let (cmd_tx, cmd_rx) = mpsc::channel();
 
         // Run pulseaudio loop in background thread
         thread::spawn(move || {
-            let pa = match PulseAudioLoop::init(app_name.as_ref(), result_tx.clone(), cmd_rx) {
+            let pa = match PulseAudioLoop::init(app_name.as_ref(), response_tx.clone(), cmd_rx) {
                 Ok(pa) => pa,
                 Err(e) => panic!("An error occurred while connecting to pulseaudio: {}", e),
             };
@@ -146,10 +147,10 @@ impl PulseAudioLoop {
             }
 
             // Signal that we're done
-            result_tx.send(PAEvent::Disconnected).ignore();
+            response_tx.send(PAResponse::Disconnected).ignore();
         });
 
-        (cmd_tx, result_rx)
+        (cmd_tx, response_rx)
     }
 
     // https://freedesktop.org/software/pulseaudio/doxygen/threaded_mainloop.html
@@ -157,7 +158,7 @@ impl PulseAudioLoop {
     // https://docs.rs/libpulse-binding/2.26.0/libpulse_binding/mainloop/threaded/index.html#example
     fn init(
         with_app_name: impl AsRef<str>,
-        tx: Sender<PAEvent>,
+        tx: Sender<PAResponse>,
         rx: Receiver<PACommand>,
     ) -> Result<PulseAudioLoop, Box<dyn Error>> {
         let app_name = with_app_name.as_ref();
@@ -181,9 +182,11 @@ impl PulseAudioLoop {
 
         // setup context
         {
-            let mainloop_ref = Rc::clone(&mainloop);
-            let context_ref = Rc::clone(&ctx);
+            let mainloop_ref = mainloop.clone();
+            let context_ref = ctx.clone();
             ctx.borrow_mut().set_state_callback(Some(Box::new(move || {
+                // TODO: investigate removing unsafe??
+                // let state = context_ref.borrow_mut().get_state();
                 let state = unsafe { (*context_ref.as_ptr()).get_state() };
                 if matches!(state, State::Ready | State::Failed | State::Terminated) {
                     unsafe { (*mainloop_ref.as_ptr()).signal(false) };
@@ -214,36 +217,7 @@ impl PulseAudioLoop {
         // context is ready now, so remove set state callback
         ctx.borrow_mut().set_state_callback(None);
 
-        // setup subscribe mask and callbacks
-        {
-            let mask = InterestMaskSet::SINK | InterestMaskSet::SOURCE;
-            ctx.borrow_mut().subscribe(mask, |success| {
-                assert!(success, "subscription failed");
-            });
-
-            let tx = tx.clone();
-            ctx.borrow_mut().set_subscribe_callback(Some(Box::new(
-                move |facility, operation, index| {
-                    // SAFETY: as per libpulse_binding's documentation, this should be safe
-                    let operation = operation.unwrap();
-                    let kind = facility.unwrap();
-
-                    // send off a subscription event
-                    let kind = PAFacility(kind);
-                    let id = PAIdent::Index(index);
-                    match operation {
-                        Operation::New => tx.send(PAEvent::SubscriptionNew(kind, id)).ignore(),
-                        Operation::Removed => {
-                            tx.send(PAEvent::SubscriptionRemoved(kind, id)).ignore()
-                        }
-                        Operation::Changed => {
-                            tx.send(PAEvent::SubscriptionChanged(kind, id)).ignore()
-                        }
-                    }
-                },
-            )));
-        }
-
+        // release lock to allow loop to continue
         mainloop.borrow_mut().unlock();
 
         Ok(PulseAudioLoop {
@@ -299,6 +273,8 @@ impl PulseAudioLoop {
                 PACommand::GetCardInfoList => self.get_card_info_list(),
                 PACommand::GetModuleInfoList => self.get_module_info_list(),
 
+                PACommand::Subscribe(mask, tx) => self.setup_subscribe(mask, tx),
+
                 PACommand::Disconnect => {
                     self.mainloop.borrow_mut().unlock();
                     self.mainloop.borrow_mut().stop();
@@ -311,12 +287,50 @@ impl PulseAudioLoop {
         }
     }
 
+    /*
+     * Server
+     */
+
     fn get_server_info(&self) {
         let tx = self.tx.clone();
         let introspector = self.ctx.borrow_mut().introspect();
         introspector.get_server_info(move |info| {
-            tx.send(PAEvent::ServerInfo(info.into())).ignore();
+            tx.send(PAResponse::ServerInfo(info.into())).ignore();
         });
+    }
+
+    /*
+     * Subscriptions
+     */
+
+    fn setup_subscribe(&self, mask: PAMask, tx: Box<dyn EventSender>) {
+        self.ctx
+            .borrow_mut()
+            .subscribe(mask, Self::success_cb(self.ctx.clone(), self.tx.clone()));
+
+        let ctx = self.ctx.clone();
+        self.ctx.borrow_mut().set_subscribe_callback(Some(Box::new(
+            move |facility, operation, index| {
+                // SAFETY: as per libpulse_binding's documentation, this should be safe
+                let operation = operation.unwrap();
+                let kind = facility.unwrap();
+
+                // send off a subscription event
+                let kind = PAFacility(kind);
+                let id = PAIdent::Index(index);
+                let res = match operation {
+                    Operation::New => tx.send(PAEvent::SubscriptionNew(kind, id)),
+                    Operation::Removed => tx.send(PAEvent::SubscriptionRemoved(kind, id)),
+                    Operation::Changed => tx.send(PAEvent::SubscriptionChanged(kind, id)),
+                };
+
+                // No one is listening to these events anymore, so remove the subscribe callback
+                if let Err(SendError(_)) = res {
+                    // TODO: verify with pa docs if this is enough, or if we need to set the mask to 0
+                    ctx.borrow_mut().set_subscribe_callback(None);
+                }
+            },
+        )));
     }
 
     /*
@@ -326,7 +340,7 @@ impl PulseAudioLoop {
     fn get_sink_mute(&self, ident: PAIdent) {
         let tx = self.tx.clone();
         self.get_sink_info(ident, move |ident, _, info| {
-            tx.send(PAEvent::Mute(ident, info.mute)).ignore();
+            tx.send(PAResponse::Mute(ident, info.mute)).ignore();
             Ok(())
         });
     }
@@ -348,7 +362,7 @@ impl PulseAudioLoop {
     fn get_sink_volume(&self, ident: PAIdent) {
         let tx = self.tx.clone();
         self.get_sink_info(ident, move |ident, _, info| {
-            tx.send(PAEvent::Volume(
+            tx.send(PAResponse::Volume(
                 ident,
                 Self::read_volumes(
                     info.channel_map.get().into_iter(),
@@ -387,7 +401,7 @@ impl PulseAudioLoop {
     fn get_source_mute(&self, ident: PAIdent) {
         let tx = self.tx.clone();
         self.get_source_info(ident, move |ident, _, info| {
-            tx.send(PAEvent::Mute(ident, info.mute)).ignore();
+            tx.send(PAResponse::Mute(ident, info.mute)).ignore();
             Ok(())
         });
     }
@@ -409,7 +423,7 @@ impl PulseAudioLoop {
     fn get_source_volume(&self, ident: PAIdent) {
         let tx = self.tx.clone();
         self.get_source_info(ident, move |ident, _, info| {
-            tx.send(PAEvent::Volume(
+            tx.send(PAResponse::Volume(
                 ident,
                 Self::read_volumes(
                     info.channel_map.get().into_iter(),
@@ -446,7 +460,7 @@ impl PulseAudioLoop {
         });
     }
 
-    /**
+    /*
      * Util
      */
 
@@ -460,19 +474,19 @@ impl PulseAudioLoop {
             .collect()
     }
 
-    fn success_cb(ctx: Ctx, tx: Sender<PAEvent>) -> Box<impl FnMut(bool)> {
+    fn success_cb(ctx: Ctx, tx: Sender<PAResponse>) -> Box<impl FnMut(bool)> {
         Box::new(move |success: bool| {
             if !success {
                 Self::handle_error(&ctx, &tx)
             } else {
-                tx.send(PAEvent::Complete).ignore();
+                tx.send(PAResponse::Complete).ignore();
             }
         })
     }
 
-    fn handle_error(ctx: &Ctx, tx: &Sender<PAEvent>) {
+    fn handle_error(ctx: &Ctx, tx: &Sender<PAResponse>) {
         let err = ctx.borrow_mut().errno().to_string();
-        tx.send(PAEvent::Error(format!(
+        tx.send(PAResponse::Error(format!(
             "Operation failed: {}",
             err.unwrap_or("An unknown error occurred".into())
         )))

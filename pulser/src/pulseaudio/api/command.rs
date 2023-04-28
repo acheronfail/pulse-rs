@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 use super::*;
+use crate::sender::EventSender;
 
 #[derive(Debug)]
 pub enum PACommand {
@@ -25,21 +26,27 @@ pub enum PACommand {
     GetSinkInputInfoList,
     GetSourceOutputInfoList,
 
+    Subscribe(PAMask, Box<dyn EventSender>),
+
     Disconnect,
     // TODO: sink inputs & source outputs (mute & volume)
 }
-
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 pub enum PAEvent {
-    /// Generic error event
-    Error(String),
-    /// Generic operation event
-    Complete,
     // Subscription events
     SubscriptionNew(PAFacility, PAIdent),
     SubscriptionRemoved(PAFacility, PAIdent),
     SubscriptionChanged(PAFacility, PAIdent),
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum PAResponse {
+    /// Generic error event
+    Error(String),
+    /// Generic operation event
+    Complete,
     /// `PACommand::GetServerInfo` response
     ServerInfo(PAServerInfo),
     /// `PACommand::GetSinkInfoList` response

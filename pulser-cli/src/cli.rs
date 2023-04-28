@@ -36,6 +36,8 @@ pub enum Command {
     GetSourceVolume(BaseArgs),
     /// Set the volume(s) for a source
     SetSourceVolume(SetVolumeArgs),
+
+    Subscribe(SubscribeArgs),
     // TODO: others...
 }
 
@@ -144,4 +146,10 @@ impl From<&SetVolumeArgs> for VolumeSpec {
 
 fn vol_from_str(s: &str) -> Result<PAVol, String> {
     PAVol::from_str(s).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Args)]
+pub struct SubscribeArgs {
+    #[arg(value_enum, required = true, num_args = 1..)]
+    pub kinds: Vec<Kind>,
 }
