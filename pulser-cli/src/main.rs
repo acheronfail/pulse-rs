@@ -87,19 +87,25 @@ fn main() -> Result<(), Box<dyn Error>> {
             json_print!(pa.set_source_volume((&args).into(), (&args).into())?);
         }
         Subscribe(args) => {
-            let mut mask = PAMask::empty();
-            for kind in args.kinds {
-                mask.insert(match kind {
-                    Kind::Cards => PAMask::CARD,
-                    Kind::Clients => PAMask::CLIENT,
-                    Kind::Modules => PAMask::MODULE,
-                    Kind::Samples => PAMask::SAMPLE_CACHE,
-                    Kind::Sinks => PAMask::SINK,
-                    Kind::SinkInputs => PAMask::SINK_INPUT,
-                    Kind::Sources => PAMask::SOURCE,
-                    Kind::SourceOutputs => PAMask::SOURCE_OUTPUT,
-                });
-            }
+            let mask = if args.kinds.is_empty() {
+                PAMask::ALL
+            } else {
+                let mut mask = PAMask::empty();
+                for kind in args.kinds {
+                    mask.insert(match kind {
+                        Kind::Cards => PAMask::CARD,
+                        Kind::Clients => PAMask::CLIENT,
+                        Kind::Modules => PAMask::MODULE,
+                        Kind::Samples => PAMask::SAMPLE_CACHE,
+                        Kind::Sinks => PAMask::SINK,
+                        Kind::SinkInputs => PAMask::SINK_INPUT,
+                        Kind::Sources => PAMask::SOURCE,
+                        Kind::SourceOutputs => PAMask::SOURCE_OUTPUT,
+                    });
+                }
+
+                mask
+            };
 
             subscribe::subscribe(pa, mask)?;
         }

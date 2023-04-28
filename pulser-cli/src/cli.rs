@@ -150,6 +150,6 @@ fn vol_from_str(s: &str) -> Result<PAVol, String> {
 
 #[derive(Debug, Args)]
 pub struct SubscribeArgs {
-    #[arg(value_enum, required = true, num_args = 1..)]
+    #[arg(value_enum)]
     pub kinds: Vec<Kind>,
 }
