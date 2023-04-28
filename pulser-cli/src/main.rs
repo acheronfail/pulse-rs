@@ -15,7 +15,7 @@ use crate::cli::{Cli, Kind};
 #[macro_export]
 macro_rules! json_print {
     ($x:expr) => {
-        println!("{}", serde_json::to_string(&$x)?);
+        println!("{}", serde_json::to_string(&$x)?)
     };
 }
 
@@ -27,6 +27,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         Info => {
             json_print!(pa.get_server_info()?);
         }
+        GetDefaultSink => json_print!(pa.get_default_sink()?),
+        GetDefaultSource => json_print!(pa.get_default_source()?),
+
         List(args) => {
             // unfortunately can't dedup with clap, so we do that here and silently ignore duplicates
             let mut kinds = args.kinds;
@@ -62,30 +65,17 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             json_print!(map);
         }
-        GetSinkMute(args) => {
-            json_print!(pa.get_sink_mute((&args).into())?);
-        }
-        GetSinkVolume(args) => {
-            json_print!(pa.get_sink_volume((&args).into())?);
-        }
-        SetSinkMute(args) => {
-            json_print!(pa.set_sink_mute((&args).into(), args.mute.into())?);
-        }
-        SetSinkVolume(args) => {
-            json_print!(pa.set_sink_volume((&args).into(), (&args).into())?);
-        }
-        GetSourceMute(args) => {
-            json_print!(pa.get_source_mute((&args).into())?);
-        }
-        GetSourceVolume(args) => {
-            json_print!(pa.get_source_volume((&args).into())?);
-        }
-        SetSourceMute(args) => {
-            json_print!(pa.set_source_mute((&args).into(), args.mute.into())?);
-        }
-        SetSourceVolume(args) => {
-            json_print!(pa.set_source_volume((&args).into(), (&args).into())?);
-        }
+
+        GetSinkMute(args) => json_print!(pa.get_sink_mute((&args).into())?),
+        GetSinkVolume(args) => json_print!(pa.get_sink_volume((&args).into())?),
+        SetSinkMute(args) => json_print!(pa.set_sink_mute((&args).into(), args.mute.into())?),
+        SetSinkVolume(args) => json_print!(pa.set_sink_volume((&args).into(), (&args).into())?),
+
+        GetSourceMute(args) => json_print!(pa.get_source_mute((&args).into())?),
+        GetSourceVolume(args) => json_print!(pa.get_source_volume((&args).into())?),
+        SetSourceMute(args) => json_print!(pa.set_source_mute((&args).into(), args.mute.into())?),
+        SetSourceVolume(args) => json_print!(pa.set_source_volume((&args).into(), (&args).into())?),
+
         Subscribe(args) => {
             let mask = if args.kinds.is_empty() {
                 PAMask::ALL

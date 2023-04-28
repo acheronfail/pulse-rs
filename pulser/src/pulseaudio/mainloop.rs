@@ -12,6 +12,7 @@ use libpulse_binding::context::introspect::{
     ClientInfo,
     ModuleInfo,
     SampleInfo,
+    ServerInfo,
     SinkInfo,
     SinkInputInfo,
     SourceInfo,
@@ -253,6 +254,8 @@ impl PulseAudioLoop {
 
             match cmd {
                 PACommand::GetServerInfo => self.get_server_info(),
+                PACommand::GetDefaultSink => self.get_default_sink(),
+                PACommand::GetDefaultSource => self.get_default_source(),
 
                 PACommand::GetSinkInfoList => self.get_sink_info_list(),
                 PACommand::GetSinkMute(id) => self.get_sink_mute(id),
@@ -291,11 +294,42 @@ impl PulseAudioLoop {
      * Server
      */
 
+    fn with_server_info<F>(&self, mut f: F)
+    where
+        F: FnMut(&ServerInfo) + 'static,
+    {
+        let introspector = self.ctx.borrow_mut().introspect();
+        introspector.get_server_info(move |info| f(info));
+    }
+
     fn get_server_info(&self) {
         let tx = self.tx.clone();
-        let introspector = self.ctx.borrow_mut().introspect();
-        introspector.get_server_info(move |info| {
+        self.with_server_info(move |info| {
             tx.send(PAResponse::ServerInfo(info.into())).ignore();
+        });
+    }
+
+    fn get_default_sink(&self) {
+        let tx = self.tx.clone();
+        self.with_server_info(move |info| {
+            tx.send(PAResponse::DefaultSink(
+                info.default_sink_name
+                    .as_ref()
+                    .map(|n| PAIdent::Name(n.to_string())),
+            ))
+            .ignore();
+        });
+    }
+
+    fn get_default_source(&self) {
+        let tx = self.tx.clone();
+        self.with_server_info(move |info| {
+            tx.send(PAResponse::DefaultSource(
+                info.default_source_name
+                    .as_ref()
+                    .map(|n| PAIdent::Name(n.to_string())),
+            ))
+            .ignore();
         });
     }
 

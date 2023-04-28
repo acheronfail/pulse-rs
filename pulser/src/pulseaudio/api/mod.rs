@@ -8,6 +8,7 @@ pub use structs::*;
 pub use volume::*;
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PAIdent {
     Index(u32),
     Name(String),

@@ -16,6 +16,11 @@ pub struct Cli {
 pub enum Command {
     /// Get server information
     Info,
+    /// Get the default sink (if any)
+    GetDefaultSink,
+    /// Get the default source (if any)
+    GetDefaultSource,
+
     /// List objects from the server
     List(ListArgs),
 

@@ -45,15 +45,37 @@ impl PulseAudio {
         PulseAudio { tx, rx_resp }
     }
 
-    pub fn subscribe(&self, mask: PAMask, tx: Box<dyn EventSender>) -> Result<OperationResult> {
-        self.tx.send(PACommand::Subscribe(mask, tx))?;
-        self.operation_result()
-    }
+    /*
+     * Server
+     */
 
     pub fn get_server_info(&self) -> Result<PAServerInfo> {
         self.tx.send(PACommand::GetServerInfo)?;
         extract_unsafe!(self.rx_resp.recv()?, PAResponse::ServerInfo(x) => x)
     }
+
+    pub fn get_default_sink(&self) -> Result<Option<PAIdent>> {
+        self.tx.send(PACommand::GetDefaultSink)?;
+        extract_unsafe!(self.rx_resp.recv()?, PAResponse::DefaultSink(x) => x)
+    }
+
+    pub fn get_default_source(&self) -> Result<Option<PAIdent>> {
+        self.tx.send(PACommand::GetDefaultSource)?;
+        extract_unsafe!(self.rx_resp.recv()?, PAResponse::DefaultSource(x) => x)
+    }
+
+    /*
+     * Subscriptions
+     */
+
+    pub fn subscribe(&self, mask: PAMask, tx: Box<dyn EventSender>) -> Result<OperationResult> {
+        self.tx.send(PACommand::Subscribe(mask, tx))?;
+        self.operation_result()
+    }
+
+    /*
+     * Lists
+     */
 
     pub fn get_card_info_list(&self) -> Result<Vec<PACardInfo>> {
         self.tx.send(PACommand::GetCardInfoList)?;
@@ -95,6 +117,10 @@ impl PulseAudio {
         extract_unsafe!(self.rx_resp.recv()?, PAResponse::SourceOutputInfoList(x) => x)
     }
 
+    /*
+     * Sinks
+     */
+
     pub fn get_sink_mute(&self, id: PAIdent) -> Result<bool> {
         self.tx.send(PACommand::GetSinkMute(id))?;
         extract_unsafe!(self.rx_resp.recv()?, PAResponse::Mute(_, x) => x)
@@ -115,6 +141,10 @@ impl PulseAudio {
         self.operation_result()
     }
 
+    /*
+     * Sources
+     */
+
     pub fn get_source_mute(&self, id: PAIdent) -> Result<bool> {
         self.tx.send(PACommand::GetSourceMute(id))?;
         extract_unsafe!(self.rx_resp.recv()?, PAResponse::Mute(_, x) => x)
@@ -134,6 +164,10 @@ impl PulseAudio {
         self.tx.send(PACommand::SetSourceVolume(id, vol))?;
         self.operation_result()
     }
+
+    /*
+     * Util
+     */
 
     fn operation_result(&self) -> Result<OperationResult> {
         match self.rx_resp.recv()? {

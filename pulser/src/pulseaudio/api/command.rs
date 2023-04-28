@@ -7,29 +7,43 @@ use crate::sender::EventSender;
 pub enum PACommand {
     GetServerInfo,
 
-    GetSinkInfoList,
+    GetDefaultSink,
+    GetDefaultSource,
+
     GetSinkMute(PAIdent),
     GetSinkVolume(PAIdent),
     SetSinkMute(PAIdent, bool),
     SetSinkVolume(PAIdent, VolumeSpec),
 
-    GetSourceInfoList,
     GetSourceMute(PAIdent),
     GetSourceVolume(PAIdent),
     SetSourceMute(PAIdent, bool),
     SetSourceVolume(PAIdent, VolumeSpec),
 
+    // TODO: "get by name/index" for each of these
     GetCardInfoList,
     GetClientInfoList,
     GetModuleInfoList,
     GetSampleInfoList,
+    GetSinkInfoList,
     GetSinkInputInfoList,
+    GetSourceInfoList,
     GetSourceOutputInfoList,
 
     Subscribe(PAMask, Box<dyn EventSender>),
 
     Disconnect,
-    // TODO: sink inputs & source outputs (mute & volume)
+    // TODO: set default sink/source
+    // TODO: move sink-input/source-output
+    // TODO: set sink-input/source-output mute
+    // TODO: set sink-input/source-output volume
+    // TODO: set sink/source port
+    // TODO: load/unload module
+    // TODO: send message
+    // TODO: set card profile
+    // TODO: set port latency offset
+    // TODO: kill sink-input/source-output/client
+    // TODO: suspend sink/source
 }
 /// Subscription events
 #[derive(Debug, Serialize)]
@@ -52,6 +66,10 @@ pub enum PAResponse {
     CardInfoList(Vec<PACardInfo>),
     /// `PACommand::GetClientInfoList` response
     ClientInfoList(Vec<PAClientInfo>),
+    /// `PACommand::GetDefaultSink` response
+    DefaultSink(Option<PAIdent>),
+    /// `PACommand::GetDefaultSource` response
+    DefaultSource(Option<PAIdent>),
     /// `PACommand::ModuleInfoList` response
     ModuleInfoList(Vec<PAModuleInfo>),
     /// `PACommand::Get*Mute` response
