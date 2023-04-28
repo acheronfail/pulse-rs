@@ -4,7 +4,6 @@ use std::io::ErrorKind;
 use std::sync::Arc;
 
 use mio::{Events, Interest, Poll, Token, Waker};
-use mio_misc::channel::channel as mio_channel;
 use mio_misc::queue::NotificationQueue;
 use mio_misc::NotificationId;
 use pulser::api::{PAEvent, PAMask};
@@ -15,6 +14,7 @@ use signal_hook_mio::v0_8::Signals;
 
 use crate::json_print;
 
+// wrap up `mio_misc`'s sender so we can `impl EventSender` for it
 struct Sender(mio_misc::channel::Sender<PAEvent>);
 
 impl Debug for Sender {
@@ -25,42 +25,49 @@ impl Debug for Sender {
 
 impl EventSender for Sender {
     fn send(&self, ev: PAEvent) -> Result<(), std::sync::mpsc::SendError<PAEvent>> {
-        match self.0.send(ev) {
-            Ok(()) => Ok(()),
-            Err(err) => match err {
-                mio_misc::channel::SendError::Disconnected(ev) => {
-                    Err(std::sync::mpsc::SendError(ev))
-                }
-                _ => unimplemented!(),
-            },
-        }
+        self.0.send(ev).map_err(|e| match e {
+            // map to type expected from `EventSender` trait
+            mio_misc::channel::SendError::Disconnected(ev) => std::sync::mpsc::SendError(ev),
+            // we use `NotificationQueue` which is an unbounded queue
+            mio_misc::channel::SendError::NotificationQueueFull => unreachable!(),
+            // this should only occur if there's an IO error in `mio`'s `Waker`
+            mio_misc::channel::SendError::Io(e) => {
+                panic!("An underlying error occurred: {}", e)
+            }
+        })
     }
+}
+
+macro_rules! token {
+    (PA_EVENT) => {
+        Token(0)
+    };
+    (SIGNALS) => {
+        Token(1)
+    };
 }
 
 pub fn subscribe(pa: PulseAudio, mask: PAMask) -> Result<(), Box<dyn Error>> {
     let mut poll = Poll::new()?;
 
-    // ---
+    // setup a channel that will land notifications in a wake-able queue each time a message is sent
+    // then use this channel for subscribing to PulseAudio events
+    let (pa_event_queue, rx) = {
+        let waker = Arc::new(Waker::new(poll.registry(), token!(PA_EVENT)).unwrap());
+        let queue = Arc::new(NotificationQueue::new(waker));
+        let (tx, rx) = mio_misc::channel::channel(queue.clone(), NotificationId::gen_next());
+        pa.subscribe(mask, Box::new(Sender(tx)))?;
 
-    let pa_event_token = Token(0);
-    let pa_event_waker = Arc::new(Waker::new(poll.registry(), pa_event_token).unwrap());
-    let pa_event_queue = Arc::new(NotificationQueue::new(pa_event_waker));
-    let pa_event_notifier = Arc::clone(&pa_event_queue);
-    let pa_event_notification_id = NotificationId::gen_next();
-    let (tx, rx) = mio_channel(pa_event_notifier, pa_event_notification_id);
+        (queue, rx)
+    };
 
-    pa.subscribe(mask, Box::new(Sender(tx)))?;
-
-    // ---
-
+    // register to receive wakeups for received signals
     let mut signals = Signals::new(&[SIGINT, SIGTERM])?;
-    let signal_token = Token(1);
     poll.registry()
-        .register(&mut signals, signal_token, Interest::READABLE)?;
+        .register(&mut signals, token!(SIGNALS), Interest::READABLE)?;
 
-    // ---
-
-    let mut events = Events::with_capacity(10);
+    // setup and start our event loop
+    let mut events = Events::with_capacity(128);
     'outer: loop {
         match poll.poll(&mut events, None) {
             Err(e) if e.kind() == ErrorKind::Interrupted => {
@@ -73,19 +80,21 @@ pub fn subscribe(pa: PulseAudio, mask: PAMask) -> Result<(), Box<dyn Error>> {
 
         for event in events.iter() {
             match event.token() {
-                Token(0) => {
+                token!(PA_EVENT) => {
                     // mio_extra's channel integration uses a queue to notify us of events - each notification
                     // corresponds to a sent event, so we must take care to drain those notifications
                     while let Some(_) = pa_event_queue.pop() {
-                        let ev = rx.try_recv().unwrap();
+                        let ev = rx
+                            .try_recv()
+                            .expect("Channel notification count != channel item count");
+
                         json_print!(ev);
                     }
                 }
-                Token(1) => {
+                token!(SIGNALS) => {
                     for signal in signals.pending() {
                         match signal {
-                            SIGINT => break 'outer,
-                            SIGTERM => break 'outer,
+                            SIGINT | SIGTERM => break 'outer,
                             n => unreachable!("Received unexpected signal event in loop: {}", n),
                         }
                     }
