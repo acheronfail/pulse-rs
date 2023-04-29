@@ -176,6 +176,138 @@ impl PulseAudio {
     }
 
     /*
+     * Sink Inputs
+     */
+
+    fn find_sink_input_by_name(&self, name: &String) -> Result<PASinkInputInfo> {
+        let sink_inputs = self.get_sink_input_info_list()?;
+        sink_inputs
+            .into_iter()
+            .find(|si| si.name.as_ref() == Some(name))
+            .ok_or_else(|| format!("No sink input found with name: {}", name).into())
+    }
+
+    pub fn get_sink_input_mute(&self, id: PAIdent) -> Result<bool> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::GetSinkInputMute(idx))?;
+                extract_unsafe!(self.rx_resp.recv()?, PAResponse::Mute(_, x) => x)
+            }
+            PAIdent::Name(ref name) => {
+                let si = self.find_sink_input_by_name(name)?;
+                self.get_sink_input_mute(PAIdent::Index(si.index))
+            }
+        }
+    }
+
+    pub fn get_sink_input_volume(&self, id: PAIdent) -> Result<VolumeReadings> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::GetSinkInputVolume(idx))?;
+                extract_unsafe!(self.rx_resp.recv()?, PAResponse::Volume(_, x) => x)
+            }
+            PAIdent::Name(ref name) => {
+                let si = self.find_sink_input_by_name(name)?;
+                self.get_sink_input_volume(PAIdent::Index(si.index))
+            }
+        }
+    }
+
+    pub fn set_sink_input_mute(&self, id: PAIdent, mute: bool) -> Result<OperationResult> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::SetSinkInputMute(idx, mute))?;
+                self.operation_result()
+            }
+            PAIdent::Name(ref name) => {
+                let si = self.find_sink_input_by_name(name)?;
+                self.set_sink_input_mute(PAIdent::Index(si.index), mute)
+            }
+        }
+    }
+
+    pub fn set_sink_input_volume(&self, id: PAIdent, vol: VolumeSpec) -> Result<OperationResult> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::SetSinkInputVolume(idx, vol))?;
+                self.operation_result()
+            }
+            PAIdent::Name(ref name) => {
+                let si = self.find_sink_input_by_name(name)?;
+                self.set_sink_input_volume(PAIdent::Index(si.index), vol)
+            }
+        }
+    }
+
+    /*
+     * Source Outputs
+     */
+
+    fn find_source_output_by_name(&self, name: &String) -> Result<PASourceOutputInfo> {
+        let source_outputs = self.get_source_output_info_list()?;
+        source_outputs
+            .into_iter()
+            .find(|si| si.name.as_ref() == Some(name))
+            .ok_or_else(|| format!("No sink input found with name: {}", name).into())
+    }
+
+    pub fn get_source_output_mute(&self, id: PAIdent) -> Result<bool> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::GetSinkInputMute(idx))?;
+                extract_unsafe!(self.rx_resp.recv()?, PAResponse::Mute(_, x) => x)
+            }
+            PAIdent::Name(ref name) => {
+                let si = self.find_source_output_by_name(name)?;
+                self.get_source_output_mute(PAIdent::Index(si.index))
+            }
+        }
+    }
+
+    pub fn get_source_output_volume(&self, id: PAIdent) -> Result<VolumeReadings> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::GetSinkInputVolume(idx))?;
+                extract_unsafe!(self.rx_resp.recv()?, PAResponse::Volume(_, x) => x)
+            }
+            PAIdent::Name(ref name) => {
+                let si = self.find_source_output_by_name(name)?;
+                self.get_source_output_volume(PAIdent::Index(si.index))
+            }
+        }
+    }
+
+    pub fn set_source_output_mute(&self, id: PAIdent, mute: bool) -> Result<OperationResult> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::SetSinkInputMute(idx, mute))?;
+                self.operation_result()
+            }
+            PAIdent::Name(ref name) => {
+                let si = self.find_source_output_by_name(name)?;
+                self.set_source_output_mute(PAIdent::Index(si.index), mute)
+            }
+        }
+    }
+
+    pub fn set_source_output_volume(
+        &self,
+        id: PAIdent,
+        vol: VolumeSpec,
+    ) -> Result<OperationResult> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::SetSinkInputVolume(idx, vol))?;
+                self.operation_result()
+            }
+            PAIdent::Name(ref name) => {
+                let si = self.find_source_output_by_name(name)?;
+                self.set_source_output_volume(PAIdent::Index(si.index), vol)
+            }
+        }
+    }
+
+    /*
      * Util
      */
 

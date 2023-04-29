@@ -22,6 +22,16 @@ pub enum PACommand {
     SetSourceMute(PAIdent, bool),
     SetSourceVolume(PAIdent, VolumeSpec),
 
+    GetSinkInputMute(u32),
+    GetSinkInputVolume(u32),
+    SetSinkInputMute(u32, bool),
+    SetSinkInputVolume(u32, VolumeSpec),
+
+    GetSourceOutputMute(u32),
+    GetSourceOutputVolume(u32),
+    SetSourceOutputMute(u32, bool),
+    SetSourceOutputVolume(u32, VolumeSpec),
+
     // TODO: "get by name/index" for each of these
     GetCardInfoList,
     GetClientInfoList,
@@ -36,8 +46,6 @@ pub enum PACommand {
 
     Disconnect,
     // TODO: move sink-input/source-output
-    // TODO: set sink-input/source-output mute
-    // TODO: set sink-input/source-output volume
     // TODO: set sink/source port
     // TODO: load/unload module
     // TODO: send message

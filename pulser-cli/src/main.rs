@@ -78,6 +78,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         SetSourceMute(args) => json_print!(pa.set_source_mute((&args).into(), args.mute.into())?),
         SetSourceVolume(args) => json_print!(pa.set_source_volume((&args).into(), (&args).into())?),
 
+        GetSinkInputMute(args) => json_print!(pa.get_sink_input_mute((&args).into())?),
+        GetSinkInputVolume(args) => json_print!(pa.get_sink_input_volume((&args).into())?),
+        SetSinkInputMute(args) => {
+            json_print!(pa.set_sink_input_mute((&args).into(), args.mute.into())?)
+        }
+        SetSinkInputVolume(args) => {
+            json_print!(pa.set_sink_input_volume((&args).into(), (&args).into())?)
+        }
+
+        GetSourceOutputMute(args) => json_print!(pa.get_source_output_mute((&args).into())?),
+        GetSourceOutputVolume(args) => json_print!(pa.get_source_output_volume((&args).into())?),
+        SetSourceOutputMute(args) => {
+            json_print!(pa.set_source_output_mute((&args).into(), args.mute.into())?)
+        }
+        SetSourceOutputVolume(args) => {
+            json_print!(pa.set_source_output_volume((&args).into(), (&args).into())?)
+        }
+
         Subscribe(args) => {
             let mask = if args.kinds.is_empty() {
                 PAMask::ALL

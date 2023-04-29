@@ -16,17 +16,17 @@ pub struct Cli {
 pub enum Command {
     /// Get server information
     Info,
+    /// List objects from the server
+    List(ListArgs),
+
     /// Get the default sink (if any)
     GetDefaultSink,
-    /// Get the default source (if any)
-    GetDefaultSource,
     /// Get the default sink (if any)
     SetDefaultSink(BaseArgs),
     /// Get the default source (if any)
+    GetDefaultSource,
+    /// Get the default source (if any)
     SetDefaultSource(BaseArgs),
-
-    /// List objects from the server
-    List(ListArgs),
 
     /// Check if a sink is muted
     GetSinkMute(BaseArgs),
@@ -46,6 +46,25 @@ pub enum Command {
     /// Set the volume(s) for a source
     SetSourceVolume(SetVolumeArgs),
 
+    /// Check if a sink-input is muted
+    GetSinkInputMute(BaseArgs),
+    /// Mute a sink-input
+    SetSinkInputMute(SetMuteArgs),
+    /// Get the volume from a sink-input
+    GetSinkInputVolume(BaseArgs),
+    /// Set the volume(s) for a sink-input
+    SetSinkInputVolume(SetVolumeArgs),
+
+    /// Check if a source-output is muted
+    GetSourceOutputMute(BaseArgs),
+    /// Mute a source-output
+    SetSourceOutputMute(SetMuteArgs),
+    /// Get the volume from a source-output
+    GetSourceOutputVolume(BaseArgs),
+    /// Set the volume(s) for a source-output
+    SetSourceOutputVolume(SetVolumeArgs),
+
+    /// Subscribe to server events
     Subscribe(SubscribeArgs),
     // TODO: others...
 }
