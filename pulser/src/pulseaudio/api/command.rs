@@ -12,6 +12,10 @@ pub enum PACommand {
     SetDefaultSink(PAIdent),
     SetDefaultSource(PAIdent),
 
+    GetCardInfo(PAIdent),
+    // TODO: test - what even is this?
+    SetCardProfile(PAIdent, String),
+
     GetClientInfo(u32),
     KillClient(u32),
 
@@ -64,7 +68,6 @@ pub enum PACommand {
 
     Disconnect,
     // TODO: send message
-    // TODO: set card profile
     // TODO: set port latency offset
 }
 /// Subscription events

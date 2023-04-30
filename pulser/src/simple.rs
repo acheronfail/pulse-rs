@@ -105,6 +105,20 @@ impl PulseAudio {
     }
 
     /*
+     * Cards
+     */
+
+    pub fn get_card_info(&self, id: PAIdent) -> Result<PACardInfo> {
+        self.tx.send(PACommand::GetCardInfo(id))?;
+        extract_unsafe!(self.rx.recv()?, PAResponse::CardInfo(x) => x)
+    }
+
+    pub fn set_card_profile(&self, id: PAIdent, profile: String) -> Result<OperationResult> {
+        self.tx.send(PACommand::SetCardProfile(id, profile))?;
+        self.operation_result()
+    }
+
+    /*
      * Clients
      */
 

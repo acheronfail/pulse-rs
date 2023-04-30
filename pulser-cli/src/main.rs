@@ -72,6 +72,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
 
+        GetCardInfo(args) => json_print!(pa.get_card_info((&args).into())?),
+        SetCardProfile(args) => {
+            json_print!(pa.set_card_profile((&args.base_args).into(), args.profile)?)
+        }
+
         GetClientInfo(args) => json_print!(pa.get_client_info((&args).into())?),
         KillClient(args) => json_print!(pa.kill_client((&args).into())?),
 

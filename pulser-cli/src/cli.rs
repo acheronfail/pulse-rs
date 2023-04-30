@@ -28,6 +28,11 @@ pub enum Command {
     /// Get the default source (if any)
     SetDefaultSource(BaseArgs),
 
+    /// Get information about a card
+    GetCardInfo(BaseArgs),
+    /// Set the profile of a card
+    SetCardProfile(SetProfileArgs),
+
     /// Get information about a client
     GetClientInfo(BaseArgs),
     /// Kill/terminate a client
@@ -199,6 +204,13 @@ pub struct SuspendArgs {
     pub base_args: BaseArgs,
     #[arg(value_enum)]
     pub suspend: Bool,
+}
+
+#[derive(Debug, Args)]
+pub struct SetProfileArgs {
+    #[clap(flatten)]
+    pub base_args: BaseArgs,
+    pub profile: String,
 }
 
 #[derive(Debug, Args)]

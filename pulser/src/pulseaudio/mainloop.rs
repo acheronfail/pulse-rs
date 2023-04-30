@@ -125,6 +125,7 @@ pub struct PulseAudioLoop {
 }
 
 impl PulseAudioLoop {
+    impl_call_ident_both!(CardInfo);
     impl_call_ident_both!(SinkInfo);
     impl_call_ident_both!(SourceInfo);
 
@@ -281,6 +282,9 @@ impl PulseAudioLoop {
                 PACommand::SetDefaultSink(id) => self.set_default_sink(id),
                 PACommand::SetDefaultSource(id) => self.set_default_source(id),
 
+                PACommand::GetCardInfo(id) => self.get_card_info(id),
+                PACommand::SetCardProfile(id, profile) => self.set_card_profile(id, &profile),
+
                 PACommand::GetClientInfo(idx) => self.get_client_info(idx),
                 PACommand::KillClient(idx) => self.kill_client(idx),
 
@@ -436,6 +440,40 @@ impl PulseAudioLoop {
                         })
                         .ok_or_else(|| format!("Failed to find source with id: {}", idx).into())
                 })
+            }
+        }
+    }
+
+    /*
+     * Cards
+     */
+
+    fn get_card_info(&self, ident: PAIdent) {
+        let tx = self.tx.clone();
+        self.with_card_info(ident, move |_, _, info| {
+            tx.send(PAResponse::CardInfo(info.into()))?;
+            Ok(())
+        });
+    }
+
+    fn set_card_profile(&self, ident: PAIdent, profile: &String) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
+        let tx = self.tx.clone();
+        let ctx = self.ctx.clone();
+        match ident {
+            PAIdent::Index(idx) => {
+                introspector.set_card_profile_by_index(
+                    idx,
+                    profile,
+                    Some(Self::success_cb(ctx, tx)),
+                );
+            }
+            PAIdent::Name(ref name) => {
+                introspector.set_card_profile_by_name(
+                    name,
+                    profile,
+                    Some(Self::success_cb(ctx, tx)),
+                );
             }
         }
     }
