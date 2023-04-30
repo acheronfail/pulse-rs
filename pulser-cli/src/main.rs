@@ -89,6 +89,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         SetSinkInputVolume(args) => {
             json_print!(pa.set_sink_input_volume((&args).into(), (&args).into())?)
         }
+        MoveSinkInput(args) => json_print!(pa.move_sink_input(args.from_id(), args.to_id())?),
 
         GetSourceOutputInfo(args) => json_print!(pa.get_source_output_info((&args).into())?),
         GetSourceOutputMute(args) => json_print!(pa.get_source_output_mute((&args).into())?),
@@ -99,6 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         SetSourceOutputVolume(args) => {
             json_print!(pa.set_source_output_volume((&args).into(), (&args).into())?)
         }
+        MoveSourceOutput(args) => json_print!(pa.move_source_output(args.from_id(), args.to_id())?),
 
         Subscribe(args) => {
             let mask = if args.kinds.is_empty() {

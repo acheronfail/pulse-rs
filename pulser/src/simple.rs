@@ -262,6 +262,19 @@ impl PulseAudio {
         }
     }
 
+    pub fn move_sink_input(&self, id: PAIdent, sink: PAIdent) -> Result<OperationResult> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::MoveSinkInput(idx, sink))?;
+                self.operation_result()
+            }
+            PAIdent::Name(ref name) => {
+                let si = self.find_sink_input_by_name(name)?;
+                self.move_sink_input(PAIdent::Index(si.index), sink)
+            }
+        }
+    }
+
     /*
      * Source Outputs
      */
@@ -339,6 +352,19 @@ impl PulseAudio {
             PAIdent::Name(ref name) => {
                 let si = self.find_source_output_by_name(name)?;
                 self.set_source_output_volume(PAIdent::Index(si.index), vol)
+            }
+        }
+    }
+
+    pub fn move_source_output(&self, id: PAIdent, source: PAIdent) -> Result<OperationResult> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::MoveSourceOutput(idx, source))?;
+                self.operation_result()
+            }
+            PAIdent::Name(ref name) => {
+                let si = self.find_source_output_by_name(name)?;
+                self.move_source_output(PAIdent::Index(si.index), source)
             }
         }
     }

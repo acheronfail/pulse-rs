@@ -29,12 +29,14 @@ pub enum PACommand {
     GetSinkInputVolume(u32),
     SetSinkInputMute(u32, bool),
     SetSinkInputVolume(u32, VolumeSpec),
+    MoveSinkInput(u32, PAIdent),
 
     GetSourceOutputInfo(u32),
     GetSourceOutputMute(u32),
     GetSourceOutputVolume(u32),
     SetSourceOutputMute(u32, bool),
     SetSourceOutputVolume(u32, VolumeSpec),
+    MoveSourceOutput(u32, PAIdent),
 
     GetCardInfoList,
     GetClientInfoList,
@@ -48,7 +50,6 @@ pub enum PACommand {
     Subscribe(PAMask, Box<dyn EventSender>),
 
     Disconnect,
-    // TODO: move sink-input/source-output
     // TODO: set sink/source port
     // TODO: load/unload module
     // TODO: send message

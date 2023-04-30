@@ -60,6 +60,8 @@ pub enum Command {
     GetSinkInputVolume(BaseArgs),
     /// Set the volume(s) for a sink-input
     SetSinkInputVolume(SetVolumeArgs),
+    /// Move a sink input to a different sink
+    MoveSinkInput(MoveArgs),
 
     /// Get information about a source-output
     GetSourceOutputInfo(BaseArgs),
@@ -71,6 +73,8 @@ pub enum Command {
     GetSourceOutputVolume(BaseArgs),
     /// Set the volume(s) for a source-output
     SetSourceOutputVolume(SetVolumeArgs),
+    /// Move a source output to a different sink
+    MoveSourceOutput(MoveArgs),
 
     /// Subscribe to server events
     Subscribe(SubscribeArgs),
@@ -99,22 +103,41 @@ pub struct ListArgs {
     pub kinds: Vec<Kind>,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum IdentKind {
+    Index,
+    Name,
+}
+
 #[derive(Debug, Args)]
-#[group(required = true, multiple = false)]
 pub struct BaseArgs {
-    #[arg(long)]
-    pub index: Option<u32>,
-    #[arg(long)]
-    pub name: Option<String>,
+    /// Either a name or an index (number)
+    #[clap(name = "NAME|INDEX")]
+    pub id: String,
+    /// How to interpret the id; if not provided, it will be inferred
+    #[clap(long)]
+    pub r#type: Option<IdentKind>,
 }
 
 impl From<&BaseArgs> for PAIdent {
     fn from(value: &BaseArgs) -> Self {
-        match (value.index, &value.name) {
-            (Some(idx), None) => PAIdent::Index(idx),
-            (None, Some(name)) => PAIdent::Name(name.clone()),
-            _ => unreachable!(),
-        }
+        parse_id(value.r#type, &value.id)
+    }
+}
+
+fn parse_id(kind: Option<IdentKind>, input: impl AsRef<str>) -> PAIdent {
+    let input = input.as_ref();
+    match kind {
+        Some(kind) => match kind {
+            IdentKind::Index => PAIdent::Index(input.parse::<u32>().unwrap()),
+            IdentKind::Name => PAIdent::Name(input.to_string()),
+        },
+        None => match input.parse::<u32>() {
+            // if it's a number, then treat it as an index
+            Ok(idx) => PAIdent::Index(idx),
+            // otherwise, treat it as a name
+            Err(_) => PAIdent::Name(input.to_string()),
+        },
     }
 }
 
@@ -188,4 +211,30 @@ fn vol_from_str(s: &str) -> Result<PAVol, String> {
 pub struct SubscribeArgs {
     #[arg(value_enum)]
     pub kinds: Vec<Kind>,
+}
+
+#[derive(Debug, Args)]
+pub struct MoveArgs {
+    /// Either a name or an index (number)
+    #[clap(name = "FROM_NAME|FROM_INDEX")]
+    pub from_id: String,
+    /// How to interpret the id; if not provided, it will be inferred
+    #[clap(long)]
+    pub from_type: Option<IdentKind>,
+    /// Either a name or an index (number)
+    #[clap(name = "TO_NAME|TO_INDEX")]
+    pub to_id: String,
+    /// How to interpret the id; if not provided, it will be inferred
+    #[clap(long)]
+    pub to_type: Option<IdentKind>,
+}
+
+impl MoveArgs {
+    pub fn from_id(&self) -> PAIdent {
+        parse_id(self.from_type, &self.from_id)
+    }
+
+    pub fn to_id(&self) -> PAIdent {
+        parse_id(self.to_type, &self.to_id)
+    }
 }

@@ -285,17 +285,18 @@ impl PulseAudioLoop {
                 PACommand::SetSinkMute(id, mute) => self.set_sink_mute(id, mute),
                 PACommand::SetSinkVolume(id, vol) => self.set_sink_volume(id, vol),
 
-                PACommand::GetSinkInputInfo(idx) => self.get_sink_input_info(idx),
-                PACommand::GetSinkInputMute(idx) => self.get_sink_input_mute(idx),
-                PACommand::GetSinkInputVolume(idx) => self.get_sink_input_volume(idx),
-                PACommand::SetSinkInputMute(idx, mute) => self.set_sink_input_mute(idx, mute),
-                PACommand::SetSinkInputVolume(idx, vol) => self.set_sink_input_volume(idx, vol),
-
                 PACommand::GetSourceInfo(id) => self.get_source_info(id),
                 PACommand::GetSourceMute(id) => self.get_source_mute(id),
                 PACommand::GetSourceVolume(id) => self.get_source_volume(id),
                 PACommand::SetSourceMute(id, mute) => self.set_source_mute(id, mute),
                 PACommand::SetSourceVolume(id, vol) => self.set_source_volume(id, vol),
+
+                PACommand::GetSinkInputInfo(idx) => self.get_sink_input_info(idx),
+                PACommand::GetSinkInputMute(idx) => self.get_sink_input_mute(idx),
+                PACommand::GetSinkInputVolume(idx) => self.get_sink_input_volume(idx),
+                PACommand::SetSinkInputMute(idx, mute) => self.set_sink_input_mute(idx, mute),
+                PACommand::SetSinkInputVolume(idx, vol) => self.set_sink_input_volume(idx, vol),
+                PACommand::MoveSinkInput(idx, sink_id) => self.move_sink_input(idx, sink_id),
 
                 PACommand::GetSourceOutputInfo(idx) => self.get_source_output_info(idx),
                 PACommand::GetSourceOutputMute(idx) => self.get_source_output_mute(idx),
@@ -303,6 +304,9 @@ impl PulseAudioLoop {
                 PACommand::SetSourceOutputMute(idx, mute) => self.set_source_output_mute(idx, mute),
                 PACommand::SetSourceOutputVolume(idx, vol) => {
                     self.set_source_output_volume(idx, vol)
+                }
+                PACommand::MoveSourceOutput(idx, source_id) => {
+                    self.move_source_output(idx, source_id)
                 }
 
                 PACommand::GetCardInfoList => self.get_card_info_list(),
@@ -654,6 +658,22 @@ impl PulseAudioLoop {
         });
     }
 
+    fn move_sink_input(&self, idx: u32, sink: PAIdent) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
+        let tx = self.tx.clone();
+        let ctx = self.ctx.clone();
+        match sink {
+            PAIdent::Index(sink_idx) => introspector.move_sink_input_by_index(
+                idx,
+                sink_idx,
+                Some(Self::success_cb(ctx, tx)),
+            ),
+            PAIdent::Name(ref name) => {
+                introspector.move_sink_input_by_name(idx, name, Some(Self::success_cb(ctx, tx)))
+            }
+        };
+    }
+
     /*
      * Source Outputs
      */
@@ -708,6 +728,22 @@ impl PulseAudioLoop {
 
             Ok(())
         });
+    }
+
+    fn move_source_output(&self, idx: u32, source: PAIdent) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
+        let tx = self.tx.clone();
+        let ctx = self.ctx.clone();
+        match source {
+            PAIdent::Index(source_idx) => introspector.move_source_output_by_index(
+                idx,
+                source_idx,
+                Some(Self::success_cb(ctx, tx)),
+            ),
+            PAIdent::Name(ref name) => {
+                introspector.move_source_output_by_name(idx, name, Some(Self::success_cb(ctx, tx)))
+            }
+        };
     }
 
     /*
