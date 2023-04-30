@@ -28,6 +28,11 @@ pub enum Command {
     /// Get the default source (if any)
     SetDefaultSource(BaseArgs),
 
+    /// Get information about a client
+    GetClientInfo(BaseArgs),
+    /// Kill/terminate a client
+    KillClient(BaseArgs),
+
     /// Get information about a sink
     GetSinkInfo(BaseArgs),
     /// Check if a sink is muted
@@ -62,6 +67,8 @@ pub enum Command {
     SetSinkInputVolume(SetVolumeArgs),
     /// Move a sink input to a different sink
     MoveSinkInput(MoveArgs),
+    /// Kill/terminate a sink input
+    KillSinkInput(BaseArgs),
 
     /// Get information about a source-output
     GetSourceOutputInfo(BaseArgs),
@@ -75,6 +82,8 @@ pub enum Command {
     SetSourceOutputVolume(SetVolumeArgs),
     /// Move a source output to a different sink
     MoveSourceOutput(MoveArgs),
+    /// Kill/terminate a source output
+    KillSourceOutput(BaseArgs),
 
     /// Subscribe to server events
     Subscribe(SubscribeArgs),

@@ -128,6 +128,7 @@ impl PulseAudioLoop {
     impl_call_ident_both!(SinkInfo);
     impl_call_ident_both!(SourceInfo);
 
+    impl_call_ident_index!(ClientInfo);
     impl_call_ident_index!(SinkInputInfo);
     impl_call_ident_index!(SourceOutputInfo);
 
@@ -279,6 +280,9 @@ impl PulseAudioLoop {
                 PACommand::SetDefaultSink(id) => self.set_default_sink(id),
                 PACommand::SetDefaultSource(id) => self.set_default_source(id),
 
+                PACommand::GetClientInfo(idx) => self.get_client_info(idx),
+                PACommand::KillClient(idx) => self.kill_client(idx),
+
                 PACommand::GetSinkInfo(id) => self.get_sink_info(id),
                 PACommand::GetSinkMute(id) => self.get_sink_mute(id),
                 PACommand::GetSinkVolume(id) => self.get_sink_volume(id),
@@ -297,6 +301,7 @@ impl PulseAudioLoop {
                 PACommand::SetSinkInputMute(idx, mute) => self.set_sink_input_mute(idx, mute),
                 PACommand::SetSinkInputVolume(idx, vol) => self.set_sink_input_volume(idx, vol),
                 PACommand::MoveSinkInput(idx, sink_id) => self.move_sink_input(idx, sink_id),
+                PACommand::KillSinkInput(idx) => self.kill_sink_input(idx),
 
                 PACommand::GetSourceOutputInfo(idx) => self.get_source_output_info(idx),
                 PACommand::GetSourceOutputMute(idx) => self.get_source_output_mute(idx),
@@ -308,6 +313,7 @@ impl PulseAudioLoop {
                 PACommand::MoveSourceOutput(idx, source_id) => {
                     self.move_source_output(idx, source_id)
                 }
+                PACommand::KillSourceOutput(idx) => self.kill_source_output(idx),
 
                 PACommand::GetCardInfoList => self.get_card_info_list(),
                 PACommand::GetClientInfoList => self.get_client_info_list(),
@@ -423,6 +429,23 @@ impl PulseAudioLoop {
                 })
             }
         }
+    }
+
+    /*
+     * Clients
+     */
+
+    fn get_client_info(&self, idx: u32) {
+        let tx = self.tx.clone();
+        self.with_client_info(idx, move |_, _, info| {
+            tx.send(PAResponse::ClientInfo(info.into())).ignore();
+            Ok(())
+        });
+    }
+
+    fn kill_client(&self, idx: u32) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
+        introspector.kill_client(idx, Self::success_cb(self.ctx.clone(), self.tx.clone()));
     }
 
     /*
@@ -674,6 +697,11 @@ impl PulseAudioLoop {
         };
     }
 
+    fn kill_sink_input(&self, idx: u32) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
+        introspector.kill_sink_input(idx, Self::success_cb(self.ctx.clone(), self.tx.clone()));
+    }
+
     /*
      * Source Outputs
      */
@@ -744,6 +772,11 @@ impl PulseAudioLoop {
                 introspector.move_source_output_by_name(idx, name, Some(Self::success_cb(ctx, tx)))
             }
         };
+    }
+
+    fn kill_source_output(&self, idx: u32) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
+        introspector.kill_source_output(idx, Self::success_cb(self.ctx.clone(), self.tx.clone()));
     }
 
     /*

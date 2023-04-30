@@ -68,6 +68,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             json_print!(map);
         }
 
+        GetClientInfo(args) => json_print!(pa.get_client_info((&args).into())?),
+        KillClient(args) => json_print!(pa.kill_client((&args).into())?),
+
         GetSinkInfo(args) => json_print!(pa.get_sink_info((&args).into())?),
         GetSinkMute(args) => json_print!(pa.get_sink_mute((&args).into())?),
         GetSinkVolume(args) => json_print!(pa.get_sink_volume((&args).into())?),
@@ -90,6 +93,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             json_print!(pa.set_sink_input_volume((&args).into(), (&args).into())?)
         }
         MoveSinkInput(args) => json_print!(pa.move_sink_input(args.from_id(), args.to_id())?),
+        KillSinkInput(args) => json_print!(pa.kill_sink_input((&args).into())?),
 
         GetSourceOutputInfo(args) => json_print!(pa.get_source_output_info((&args).into())?),
         GetSourceOutputMute(args) => json_print!(pa.get_source_output_mute((&args).into())?),
@@ -101,6 +105,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             json_print!(pa.set_source_output_volume((&args).into(), (&args).into())?)
         }
         MoveSourceOutput(args) => json_print!(pa.move_source_output(args.from_id(), args.to_id())?),
+        KillSourceOutput(args) => json_print!(pa.kill_source_output((&args).into())?),
 
         Subscribe(args) => {
             let mask = if args.kinds.is_empty() {

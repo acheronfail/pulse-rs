@@ -32,8 +32,28 @@ pub struct PulseAudio {
     rx: Receiver<PAResponse>,
 }
 
+macro_rules! impl_find {
+    ($ty:ident) => {
+        paste::paste! {
+            fn [<find_ $ty:snake _by_name>](&self, name: &String) -> Result<[<PA $ty>]> {
+                let items = self.[<get_ $ty:snake _list>]()?;
+                items
+                    .into_iter()
+                    .find(|x| x.name.as_ref() == Some(name))
+                    .ok_or_else(|| {
+                        format!("No {} found with name: {}", stringify!([<$ty:snake>]), name).into()
+                    })
+            }
+        }
+    };
+}
+
 impl PulseAudio {
     pub const DEFAULT_NAME: &str = "Pulser";
+
+    impl_find!(ClientInfo);
+    impl_find!(SinkInputInfo);
+    impl_find!(SourceOutputInfo);
 
     pub fn connect(name: Option<&str>) -> PulseAudio {
         let name = name
@@ -81,6 +101,36 @@ impl PulseAudio {
     pub fn subscribe(&self, mask: PAMask, tx: Box<dyn EventSender>) -> Result<OperationResult> {
         self.tx.send(PACommand::Subscribe(mask, tx))?;
         self.operation_result()
+    }
+
+    /*
+     * Clients
+     */
+
+    pub fn get_client_info(&self, id: PAIdent) -> Result<PAClientInfo> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::GetClientInfo(idx))?;
+                extract_unsafe!(self.rx.recv()?, PAResponse::ClientInfo(x) => x)
+            }
+            PAIdent::Name(ref name) => {
+                let client = self.find_client_info_by_name(name)?;
+                self.get_client_info(PAIdent::Index(client.index))
+            }
+        }
+    }
+
+    pub fn kill_client(&self, id: PAIdent) -> Result<OperationResult> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::KillClient(idx))?;
+                self.operation_result()
+            }
+            PAIdent::Name(ref name) => {
+                let client = self.find_client_info_by_name(name)?;
+                self.kill_client(PAIdent::Index(client.index))
+            }
+        }
     }
 
     /*
@@ -189,14 +239,6 @@ impl PulseAudio {
      * Sink Inputs
      */
 
-    fn find_sink_input_by_name(&self, name: &String) -> Result<PASinkInputInfo> {
-        let sink_inputs = self.get_sink_input_info_list()?;
-        sink_inputs
-            .into_iter()
-            .find(|si| si.name.as_ref() == Some(name))
-            .ok_or_else(|| format!("No sink input found with name: {}", name).into())
-    }
-
     pub fn get_sink_input_info(&self, id: PAIdent) -> Result<PASinkInputInfo> {
         match id {
             PAIdent::Index(idx) => {
@@ -204,7 +246,7 @@ impl PulseAudio {
                 extract_unsafe!(self.rx.recv()?, PAResponse::SinkInputInfo(x) => x)
             }
             PAIdent::Name(ref name) => {
-                let si = self.find_sink_input_by_name(name)?;
+                let si = self.find_sink_input_info_by_name(name)?;
                 self.get_sink_input_info(PAIdent::Index(si.index))
             }
         }
@@ -217,7 +259,7 @@ impl PulseAudio {
                 extract_unsafe!(self.rx.recv()?, PAResponse::Mute(_, x) => x)
             }
             PAIdent::Name(ref name) => {
-                let si = self.find_sink_input_by_name(name)?;
+                let si = self.find_sink_input_info_by_name(name)?;
                 self.get_sink_input_mute(PAIdent::Index(si.index))
             }
         }
@@ -230,7 +272,7 @@ impl PulseAudio {
                 extract_unsafe!(self.rx.recv()?, PAResponse::Volume(_, x) => x)
             }
             PAIdent::Name(ref name) => {
-                let si = self.find_sink_input_by_name(name)?;
+                let si = self.find_sink_input_info_by_name(name)?;
                 self.get_sink_input_volume(PAIdent::Index(si.index))
             }
         }
@@ -243,7 +285,7 @@ impl PulseAudio {
                 self.operation_result()
             }
             PAIdent::Name(ref name) => {
-                let si = self.find_sink_input_by_name(name)?;
+                let si = self.find_sink_input_info_by_name(name)?;
                 self.set_sink_input_mute(PAIdent::Index(si.index), mute)
             }
         }
@@ -256,7 +298,7 @@ impl PulseAudio {
                 self.operation_result()
             }
             PAIdent::Name(ref name) => {
-                let si = self.find_sink_input_by_name(name)?;
+                let si = self.find_sink_input_info_by_name(name)?;
                 self.set_sink_input_volume(PAIdent::Index(si.index), vol)
             }
         }
@@ -269,8 +311,21 @@ impl PulseAudio {
                 self.operation_result()
             }
             PAIdent::Name(ref name) => {
-                let si = self.find_sink_input_by_name(name)?;
+                let si = self.find_sink_input_info_by_name(name)?;
                 self.move_sink_input(PAIdent::Index(si.index), sink)
+            }
+        }
+    }
+
+    pub fn kill_sink_input(&self, id: PAIdent) -> Result<OperationResult> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::KillSinkInput(idx))?;
+                self.operation_result()
+            }
+            PAIdent::Name(ref name) => {
+                let si = self.find_sink_input_info_by_name(name)?;
+                self.kill_sink_input(PAIdent::Index(si.index))
             }
         }
     }
@@ -279,14 +334,6 @@ impl PulseAudio {
      * Source Outputs
      */
 
-    fn find_source_output_by_name(&self, name: &String) -> Result<PASourceOutputInfo> {
-        let source_outputs = self.get_source_output_info_list()?;
-        source_outputs
-            .into_iter()
-            .find(|si| si.name.as_ref() == Some(name))
-            .ok_or_else(|| format!("No sink input found with name: {}", name).into())
-    }
-
     pub fn get_source_output_info(&self, id: PAIdent) -> Result<PASourceOutputInfo> {
         match id {
             PAIdent::Index(idx) => {
@@ -294,7 +341,7 @@ impl PulseAudio {
                 extract_unsafe!(self.rx.recv()?, PAResponse::SourceOutputInfo(x) => x)
             }
             PAIdent::Name(ref name) => {
-                let si = self.find_source_output_by_name(name)?;
+                let si = self.find_source_output_info_by_name(name)?;
                 self.get_source_output_info(PAIdent::Index(si.index))
             }
         }
@@ -307,7 +354,7 @@ impl PulseAudio {
                 extract_unsafe!(self.rx.recv()?, PAResponse::Mute(_, x) => x)
             }
             PAIdent::Name(ref name) => {
-                let si = self.find_source_output_by_name(name)?;
+                let si = self.find_source_output_info_by_name(name)?;
                 self.get_source_output_mute(PAIdent::Index(si.index))
             }
         }
@@ -320,7 +367,7 @@ impl PulseAudio {
                 extract_unsafe!(self.rx.recv()?, PAResponse::Volume(_, x) => x)
             }
             PAIdent::Name(ref name) => {
-                let si = self.find_source_output_by_name(name)?;
+                let si = self.find_source_output_info_by_name(name)?;
                 self.get_source_output_volume(PAIdent::Index(si.index))
             }
         }
@@ -333,7 +380,7 @@ impl PulseAudio {
                 self.operation_result()
             }
             PAIdent::Name(ref name) => {
-                let si = self.find_source_output_by_name(name)?;
+                let si = self.find_source_output_info_by_name(name)?;
                 self.set_source_output_mute(PAIdent::Index(si.index), mute)
             }
         }
@@ -350,7 +397,7 @@ impl PulseAudio {
                 self.operation_result()
             }
             PAIdent::Name(ref name) => {
-                let si = self.find_source_output_by_name(name)?;
+                let si = self.find_source_output_info_by_name(name)?;
                 self.set_source_output_volume(PAIdent::Index(si.index), vol)
             }
         }
@@ -363,8 +410,21 @@ impl PulseAudio {
                 self.operation_result()
             }
             PAIdent::Name(ref name) => {
-                let si = self.find_source_output_by_name(name)?;
+                let si = self.find_source_output_info_by_name(name)?;
                 self.move_source_output(PAIdent::Index(si.index), source)
+            }
+        }
+    }
+
+    pub fn kill_source_output(&self, id: PAIdent) -> Result<OperationResult> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::KillSinkInput(idx))?;
+                self.operation_result()
+            }
+            PAIdent::Name(ref name) => {
+                let si = self.find_source_output_info_by_name(name)?;
+                self.kill_source_output(PAIdent::Index(si.index))
             }
         }
     }

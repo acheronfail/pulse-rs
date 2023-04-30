@@ -12,6 +12,9 @@ pub enum PACommand {
     SetDefaultSink(PAIdent),
     SetDefaultSource(PAIdent),
 
+    GetClientInfo(u32),
+    KillClient(u32),
+
     GetSinkInfo(PAIdent),
     GetSinkMute(PAIdent),
     GetSinkVolume(PAIdent),
@@ -30,6 +33,7 @@ pub enum PACommand {
     SetSinkInputMute(u32, bool),
     SetSinkInputVolume(u32, VolumeSpec),
     MoveSinkInput(u32, PAIdent),
+    KillSinkInput(u32),
 
     GetSourceOutputInfo(u32),
     GetSourceOutputMute(u32),
@@ -37,6 +41,7 @@ pub enum PACommand {
     SetSourceOutputMute(u32, bool),
     SetSourceOutputVolume(u32, VolumeSpec),
     MoveSourceOutput(u32, PAIdent),
+    KillSourceOutput(u32),
 
     GetCardInfoList,
     GetClientInfoList,
@@ -55,7 +60,6 @@ pub enum PACommand {
     // TODO: send message
     // TODO: set card profile
     // TODO: set port latency offset
-    // TODO: kill sink-input/source-output/client
     // TODO: suspend sink/source
 }
 /// Subscription events
