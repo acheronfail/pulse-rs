@@ -86,6 +86,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             json_print!(pa.set_sink_mute((&args.base_args).into(), args.mute.into())?)
         }
         SetSinkVolume(args) => json_print!(pa.set_sink_volume((&args).into(), (&args).into())?),
+        SetSinkPort(args) => json_print!(pa.set_sink_port((&args.base_args).into(), args.port)?),
         SuspendSink(args) => {
             json_print!(pa.suspend_sink((&args.base_args).into(), args.suspend.into())?)
         }
@@ -97,6 +98,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             json_print!(pa.set_source_mute((&args.base_args).into(), args.mute.into())?)
         }
         SetSourceVolume(args) => json_print!(pa.set_source_volume((&args).into(), (&args).into())?),
+        SetSourcePort(args) => {
+            json_print!(pa.set_source_port((&args.base_args).into(), args.port)?)
+        }
         SuspendSource(args) => {
             json_print!(pa.suspend_source((&args.base_args).into(), args.suspend.into())?)
         }

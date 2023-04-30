@@ -24,6 +24,7 @@ pub enum PACommand {
     GetSinkVolume(PAIdent),
     SetSinkMute(PAIdent, bool),
     SetSinkVolume(PAIdent, VolumeSpec),
+    SetSinkPort(PAIdent, String),
     SuspendSink(PAIdent, bool),
 
     GetSourceInfo(PAIdent),
@@ -31,6 +32,7 @@ pub enum PACommand {
     GetSourceVolume(PAIdent),
     SetSourceMute(PAIdent, bool),
     SetSourceVolume(PAIdent, VolumeSpec),
+    SetSourcePort(PAIdent, String),
     SuspendSource(PAIdent, bool),
 
     GetSinkInputInfo(u32),
@@ -61,7 +63,6 @@ pub enum PACommand {
     Subscribe(PAMask, Box<dyn EventSender>),
 
     Disconnect,
-    // TODO: set sink/source port
     // TODO: send message
     // TODO: set card profile
     // TODO: set port latency offset

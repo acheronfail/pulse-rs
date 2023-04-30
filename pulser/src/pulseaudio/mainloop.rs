@@ -293,6 +293,7 @@ impl PulseAudioLoop {
                 PACommand::GetSinkVolume(id) => self.get_sink_volume(id),
                 PACommand::SetSinkMute(id, mute) => self.set_sink_mute(id, mute),
                 PACommand::SetSinkVolume(id, vol) => self.set_sink_volume(id, vol),
+                PACommand::SetSinkPort(id, ref name) => self.set_sink_port(id, name),
                 PACommand::SuspendSink(id, suspend) => self.suspend_sink(id, suspend),
 
                 PACommand::GetSourceInfo(id) => self.get_source_info(id),
@@ -300,6 +301,7 @@ impl PulseAudioLoop {
                 PACommand::GetSourceVolume(id) => self.get_source_volume(id),
                 PACommand::SetSourceMute(id, mute) => self.set_source_mute(id, mute),
                 PACommand::SetSourceVolume(id, vol) => self.set_source_volume(id, vol),
+                PACommand::SetSourcePort(id, ref name) => self.set_source_port(id, name),
                 PACommand::SuspendSource(id, suspend) => self.suspend_source(id, suspend),
 
                 PACommand::GetSinkInputInfo(idx) => self.get_sink_input_info(idx),
@@ -585,6 +587,20 @@ impl PulseAudioLoop {
         });
     }
 
+    fn set_sink_port(&self, ident: PAIdent, port: &String) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
+        let tx = self.tx.clone();
+        let ctx = self.ctx.clone();
+        match ident {
+            PAIdent::Index(idx) => {
+                introspector.set_sink_port_by_index(idx, port, Some(Self::success_cb(ctx, tx)));
+            }
+            PAIdent::Name(ref name) => {
+                introspector.set_sink_port_by_name(name, port, Some(Self::success_cb(ctx, tx)));
+            }
+        }
+    }
+
     fn suspend_sink(&self, ident: PAIdent, suspend: bool) {
         let mut introspector = self.ctx.borrow_mut().introspect();
         let tx = self.tx.clone();
@@ -671,6 +687,20 @@ impl PulseAudioLoop {
 
             Ok(())
         });
+    }
+
+    fn set_source_port(&self, ident: PAIdent, port: &String) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
+        let tx = self.tx.clone();
+        let ctx = self.ctx.clone();
+        match ident {
+            PAIdent::Index(idx) => {
+                introspector.set_source_port_by_index(idx, port, Some(Self::success_cb(ctx, tx)));
+            }
+            PAIdent::Name(ref name) => {
+                introspector.set_source_port_by_name(name, port, Some(Self::success_cb(ctx, tx)));
+            }
+        }
     }
 
     fn suspend_source(&self, ident: PAIdent, suspend: bool) {

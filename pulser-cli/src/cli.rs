@@ -50,6 +50,8 @@ pub enum Command {
     GetSinkVolume(BaseArgs),
     /// Set the volume(s) for a sink
     SetSinkVolume(SetVolumeArgs),
+    /// Set the port for a sink
+    SetSinkPort(SetPortArgs),
     /// Suspend a sink
     SuspendSink(SuspendArgs),
 
@@ -63,6 +65,8 @@ pub enum Command {
     GetSourceVolume(BaseArgs),
     /// Set the volume(s) for a source
     SetSourceVolume(SetVolumeArgs),
+    /// Set the port for a source
+    SetSourcePort(SetPortArgs),
     /// Suspend a source
     SuspendSource(SuspendArgs),
 
@@ -195,6 +199,14 @@ pub struct SuspendArgs {
     pub base_args: BaseArgs,
     #[arg(value_enum)]
     pub suspend: Bool,
+}
+
+#[derive(Debug, Args)]
+pub struct SetPortArgs {
+    #[clap(flatten)]
+    pub base_args: BaseArgs,
+    #[clap(required = true)]
+    pub port: String,
 }
 
 #[derive(Debug, Args)]
