@@ -15,6 +15,7 @@ pub enum PACommand {
     GetCardInfo(PAIdent),
     // TODO: test - what even is this?
     SetCardProfile(PAIdent, String),
+    SetPortLatencyOffset(String, String, i64),
 
     GetClientInfo(u32),
     KillClient(u32),
@@ -68,7 +69,6 @@ pub enum PACommand {
 
     Disconnect,
     // TODO: send message
-    // TODO: set port latency offset
 }
 /// Subscription events
 #[derive(Debug, Serialize)]

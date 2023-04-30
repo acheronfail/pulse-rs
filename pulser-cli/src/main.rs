@@ -76,6 +76,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         SetCardProfile(args) => {
             json_print!(pa.set_card_profile((&args.base_args).into(), args.profile)?)
         }
+        SetPortLatencyOffset(args) => {
+            json_print!(pa.set_port_latency_offset(args.card_id(), args.port_id(), args.offset)?)
+        }
 
         GetClientInfo(args) => json_print!(pa.get_client_info((&args).into())?),
         KillClient(args) => json_print!(pa.kill_client((&args).into())?),

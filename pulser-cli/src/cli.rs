@@ -32,6 +32,8 @@ pub enum Command {
     GetCardInfo(BaseArgs),
     /// Set the profile of a card
     SetCardProfile(SetProfileArgs),
+    /// Set the latency offset of a card port
+    SetPortLatencyOffset(SetPortLatencyArgs),
 
     /// Get information about a client
     GetClientInfo(BaseArgs),
@@ -292,4 +294,32 @@ pub struct LoadModuleArgs {
     /// Arguments to pass to the module
     #[clap(required = true)]
     pub args: String,
+}
+
+#[derive(Debug, Args)]
+pub struct SetPortLatencyArgs {
+    /// Either a name or an index (number)
+    #[clap(name = "CARD_NAME|CARD_INDEX")]
+    pub card_id: String,
+    /// How to interpret the id; if not provided, it will be inferred
+    #[clap(long)]
+    pub card_type: Option<IdentKind>,
+    /// Either a name or an index (number)
+    #[clap(name = "PORT_NAME|PORT_INDEX")]
+    pub port_id: String,
+    /// How to interpret the id; if not provided, it will be inferred
+    #[clap(long)]
+    pub port_type: Option<IdentKind>,
+    /// The new latency offset
+    pub offset: i64,
+}
+
+impl SetPortLatencyArgs {
+    pub fn card_id(&self) -> PAIdent {
+        parse_id(self.card_type, &self.card_id)
+    }
+
+    pub fn port_id(&self) -> PAIdent {
+        parse_id(self.port_type, &self.port_id)
+    }
 }

@@ -118,6 +118,48 @@ impl PulseAudio {
         self.operation_result()
     }
 
+    pub fn set_port_latency_offset(
+        &self,
+        card_id: PAIdent,
+        port_id: PAIdent,
+        offset: i64,
+    ) -> Result<OperationResult> {
+        let card = self.get_card_info(card_id.clone())?;
+        let port = card.ports.into_iter().enumerate().find_map(|(i, p)| {
+            let found = match port_id {
+                PAIdent::Index(idx) => idx == i as u32,
+                PAIdent::Name(ref name) => p.name.as_ref() == Some(name),
+            };
+
+            if found {
+                Some(p)
+            } else {
+                None
+            }
+        });
+        let card = match card.name {
+            Some(name) => name,
+            None => return Err(format!("No card found with id: {}", card_id).into()),
+        };
+        let port = match port {
+            Some(port) => match port.name {
+                Some(name) => name,
+                None => {
+                    return Err(format!(
+                        "Found port with id: {}, but it has no name and one is required",
+                        port_id
+                    )
+                    .into())
+                }
+            },
+            None => return Err(format!("No port found with id: {}", port_id).into()),
+        };
+
+        self.tx
+            .send(PACommand::SetPortLatencyOffset(card, port, offset))?;
+        self.operation_result()
+    }
+
     /*
      * Clients
      */

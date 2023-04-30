@@ -284,6 +284,9 @@ impl PulseAudioLoop {
 
                 PACommand::GetCardInfo(id) => self.get_card_info(id),
                 PACommand::SetCardProfile(id, profile) => self.set_card_profile(id, &profile),
+                PACommand::SetPortLatencyOffset(card, port, offset) => {
+                    self.set_port_latency_offset(&card, &port, offset)
+                }
 
                 PACommand::GetClientInfo(idx) => self.get_client_info(idx),
                 PACommand::KillClient(idx) => self.kill_client(idx),
@@ -476,6 +479,13 @@ impl PulseAudioLoop {
                 );
             }
         }
+    }
+
+    fn set_port_latency_offset(&self, card: &String, port: &String, offset: i64) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
+        let tx = self.tx.clone();
+        let ctx = self.ctx.clone();
+        introspector.set_port_latency_offset(card, port, offset, Some(Self::success_cb(ctx, tx)));
     }
 
     /*
