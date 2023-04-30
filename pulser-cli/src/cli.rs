@@ -33,6 +33,13 @@ pub enum Command {
     /// Kill/terminate a client
     KillClient(BaseArgs),
 
+    /// Get information about a module
+    GetModuleInfo(BaseArgs),
+    /// Load a new module
+    LoadModule(LoadModuleArgs),
+    /// Unload an existing module
+    UnloadModule(BaseArgs),
+
     /// Get information about a sink
     GetSinkInfo(BaseArgs),
     /// Check if a sink is muted
@@ -246,4 +253,13 @@ impl MoveArgs {
     pub fn to_id(&self) -> PAIdent {
         parse_id(self.to_type, &self.to_id)
     }
+}
+
+#[derive(Debug, Args)]
+pub struct LoadModuleArgs {
+    #[clap(required = true)]
+    pub name: String,
+    /// Arguments to pass to the module
+    #[clap(required = true)]
+    pub args: String,
 }

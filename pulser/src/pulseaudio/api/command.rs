@@ -15,6 +15,10 @@ pub enum PACommand {
     GetClientInfo(u32),
     KillClient(u32),
 
+    GetModuleInfo(u32),
+    LoadModule(String, String),
+    UnloadModule(u32),
+
     GetSinkInfo(PAIdent),
     GetSinkMute(PAIdent),
     GetSinkVolume(PAIdent),
@@ -56,7 +60,6 @@ pub enum PACommand {
 
     Disconnect,
     // TODO: set sink/source port
-    // TODO: load/unload module
     // TODO: send message
     // TODO: set card profile
     // TODO: set port latency offset
@@ -95,6 +98,8 @@ pub enum PAResponse {
     ModuleInfoList(Vec<PAModuleInfo>),
     /// `PACommand::ModuleInfo` response
     ModuleInfo(PAModuleInfo),
+    /// `PACommand::LoadModule` response
+    ModuleLoaded(u32),
     /// `PACommand::Get*Mute` response
     Mute(PAIdent, bool),
     /// `PACommand::SampleInfoList` response

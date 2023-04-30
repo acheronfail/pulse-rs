@@ -129,6 +129,7 @@ impl PulseAudioLoop {
     impl_call_ident_both!(SourceInfo);
 
     impl_call_ident_index!(ClientInfo);
+    impl_call_ident_index!(ModuleInfo);
     impl_call_ident_index!(SinkInputInfo);
     impl_call_ident_index!(SourceOutputInfo);
 
@@ -282,6 +283,10 @@ impl PulseAudioLoop {
 
                 PACommand::GetClientInfo(idx) => self.get_client_info(idx),
                 PACommand::KillClient(idx) => self.kill_client(idx),
+
+                PACommand::GetModuleInfo(idx) => self.get_module_info(idx),
+                PACommand::LoadModule(name, args) => self.load_module(&name, &args),
+                PACommand::UnloadModule(idx) => self.unload_module(idx),
 
                 PACommand::GetSinkInfo(id) => self.get_sink_info(id),
                 PACommand::GetSinkMute(id) => self.get_sink_mute(id),
@@ -446,6 +451,33 @@ impl PulseAudioLoop {
     fn kill_client(&self, idx: u32) {
         let mut introspector = self.ctx.borrow_mut().introspect();
         introspector.kill_client(idx, Self::success_cb(self.ctx.clone(), self.tx.clone()));
+    }
+
+    /*
+     * Modules
+     */
+
+    fn get_module_info(&self, idx: u32) {
+        let tx = self.tx.clone();
+        self.with_module_info(idx, move |_, _, info| {
+            tx.send(PAResponse::ModuleInfo(info.into())).ignore();
+            Ok(())
+        });
+    }
+
+    fn load_module(&self, name: &String, argument: &String) {
+        let tx = self.tx.clone();
+        let mut introspector = self.ctx.borrow_mut().introspect();
+        // TODO: can I catch this panic? or at least error gracefully?
+        introspector.load_module(name, argument, move |index: u32| {
+            tx.send(PAResponse::ModuleLoaded(index)).ignore();
+        });
+    }
+
+    fn unload_module(&self, idx: u32) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
+        // TODO: can I catch this panic? or at least error gracefully?
+        introspector.unload_module(idx, Self::success_cb(self.ctx.clone(), self.tx.clone()));
     }
 
     /*

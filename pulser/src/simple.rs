@@ -52,6 +52,7 @@ impl PulseAudio {
     pub const DEFAULT_NAME: &str = "Pulser";
 
     impl_find!(ClientInfo);
+    impl_find!(ModuleInfo);
     impl_find!(SinkInputInfo);
     impl_find!(SourceOutputInfo);
 
@@ -129,6 +130,41 @@ impl PulseAudio {
             PAIdent::Name(ref name) => {
                 let client = self.find_client_info_by_name(name)?;
                 self.kill_client(PAIdent::Index(client.index))
+            }
+        }
+    }
+
+    /*
+     * Modules
+     */
+
+    pub fn get_module_info(&self, id: PAIdent) -> Result<PAModuleInfo> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::GetModuleInfo(idx))?;
+                extract_unsafe!(self.rx.recv()?, PAResponse::ModuleInfo(x) => x)
+            }
+            PAIdent::Name(ref name) => {
+                let module = self.find_module_info_by_name(name)?;
+                self.get_module_info(PAIdent::Index(module.index))
+            }
+        }
+    }
+
+    pub fn load_module(&self, name: String, args: String) -> Result<u32> {
+        self.tx.send(PACommand::LoadModule(name, args))?;
+        extract_unsafe!(self.rx.recv()?, PAResponse::ModuleLoaded(x) => x)
+    }
+
+    pub fn unload_module(&self, id: PAIdent) -> Result<OperationResult> {
+        match id {
+            PAIdent::Index(idx) => {
+                self.tx.send(PACommand::UnloadModule(idx))?;
+                self.operation_result()
+            }
+            PAIdent::Name(ref name) => {
+                let module = self.find_module_info_by_name(name)?;
+                self.unload_module(PAIdent::Index(module.index))
             }
         }
     }

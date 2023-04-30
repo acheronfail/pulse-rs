@@ -65,11 +65,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .collect::<Result<BTreeMap<Kind, _>, _>>()
                 .unwrap();
 
-            json_print!(map);
+            if map.len() == 1 {
+                json_print!(map.values().next().unwrap());
+            } else {
+                json_print!(map);
+            }
         }
 
         GetClientInfo(args) => json_print!(pa.get_client_info((&args).into())?),
         KillClient(args) => json_print!(pa.kill_client((&args).into())?),
+
+        GetModuleInfo(args) => json_print!(pa.get_module_info((&args).into())?),
+        LoadModule(args) => json_print!(pa.load_module(args.name, args.args)?),
+        UnloadModule(args) => json_print!(pa.unload_module((&args).into())?),
 
         GetSinkInfo(args) => json_print!(pa.get_sink_info((&args).into())?),
         GetSinkMute(args) => json_print!(pa.get_sink_mute((&args).into())?),
