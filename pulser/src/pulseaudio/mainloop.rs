@@ -53,57 +53,50 @@ macro_rules! cb {
 }
 
 macro_rules! impl_call_ident_both {
-    ($method:ident, $ty:ident) => {
-        fn $method<F>(&self, ident: PAIdent, mut f: F)
-        where
-            F: FnMut(PAIdent, Ctx, &$ty) -> Res + 'static,
-        {
-            let tx = self.tx.clone();
-            let ctx = self.ctx.clone();
-
-            macro_rules! inner {
-                ($prefix:ident, $cb:expr) => {
-                    paste::paste! {
-                        let introspector = ctx.borrow_mut().introspect();
-                        match ident.clone() {
-                            PAIdent::Index(idx) => introspector.[<$prefix index>](idx, $cb),
-                            PAIdent::Name(ref name) => introspector.[<$prefix name>](name, $cb),
-                        };
-                    }
+    ($ty:ident) => {
+        paste::paste! {
+            fn [<with_ $ty:snake>]<F>(&self, ident: PAIdent, mut f: F)
+            where
+                F: FnMut(PAIdent, Ctx, &$ty) -> Res + 'static,
+            {
+                let tx = self.tx.clone();
+                let ctx = self.ctx.clone();
+                let introspector = ctx.borrow_mut().introspect();
+                match ident.clone() {
+                    PAIdent::Index(idx) => introspector.[<get_ $ty:snake _by_index>](idx, cb!(f, ident, ctx, tx)),
+                    PAIdent::Name(ref name) => introspector.[<get_ $ty:snake _by_name>](name, cb!(f, ident, ctx, tx)),
                 };
-            }
-
-            paste::paste! {
-                inner!([<$method _by_>], cb!(f, ident, ctx, tx));
             }
         }
     };
 }
 
 macro_rules! impl_call_ident_index {
-    ($method:ident, $ty:ident) => {
-        fn $method<F>(&self, idx: u32, mut f: F)
-        where
-            F: FnMut(PAIdent, Ctx, &$ty) -> Res + 'static,
-        {
-            let tx = self.tx.clone();
-            let ctx = self.ctx.clone();
-            let introspector = ctx.borrow_mut().introspect();
-            let ident = PAIdent::Index(idx);
-            introspector.$method(idx, cb!(f, ident, ctx, tx));
+    ($ty:ident) => {
+        paste::paste! {
+            fn [<with_ $ty:snake>]<F>(&self, idx: u32, mut f: F)
+            where
+                F: FnMut(PAIdent, Ctx, &$ty) -> Res + 'static,
+            {
+                let tx = self.tx.clone();
+                let ctx = self.ctx.clone();
+                let introspector = ctx.borrow_mut().introspect();
+                let ident = PAIdent::Index(idx);
+                introspector.[<get_ $ty:snake>](idx, cb!(f, ident, ctx, tx));
+            }
         }
     };
 }
 
 macro_rules! impl_list_call {
-    ($pa_method:ident, $ty:ident) => {
-        fn $pa_method(&self) {
-            paste::paste! {
+    ($ty:ident) => {
+        paste::paste! {
+            fn [<get_ $ty:snake _list>](&self) {
                 let introspector = self.ctx.borrow_mut().introspect();
                 let tx = self.tx.clone();
                 let ctx = self.ctx.clone();
                 let mut v: Vec<[<PA $ty>]> = vec![];
-                introspector.$pa_method(move |result: ListResult<&$ty>| {
+                introspector.[<get_ $ty:snake _list>](move |result: ListResult<&$ty>| {
                     match result {
                         // Called for each item in the list
                         ListResult::Item(info) => v.push([<PA $ty>]::from(info)),
@@ -132,20 +125,20 @@ pub struct PulseAudioLoop {
 }
 
 impl PulseAudioLoop {
-    impl_call_ident_both!(get_sink_info, SinkInfo);
-    impl_call_ident_both!(get_source_info, SourceInfo);
+    impl_call_ident_both!(SinkInfo);
+    impl_call_ident_both!(SourceInfo);
 
-    impl_call_ident_index!(get_sink_input_info, SinkInputInfo);
-    impl_call_ident_index!(get_source_output_info, SourceOutputInfo);
+    impl_call_ident_index!(SinkInputInfo);
+    impl_call_ident_index!(SourceOutputInfo);
 
-    impl_list_call!(get_sink_info_list, SinkInfo);
-    impl_list_call!(get_source_info_list, SourceInfo);
-    impl_list_call!(get_sink_input_info_list, SinkInputInfo);
-    impl_list_call!(get_source_output_info_list, SourceOutputInfo);
-    impl_list_call!(get_client_info_list, ClientInfo);
-    impl_list_call!(get_sample_info_list, SampleInfo);
-    impl_list_call!(get_card_info_list, CardInfo);
-    impl_list_call!(get_module_info_list, ModuleInfo);
+    impl_list_call!(SinkInfo);
+    impl_list_call!(SourceInfo);
+    impl_list_call!(SinkInputInfo);
+    impl_list_call!(SourceOutputInfo);
+    impl_list_call!(ClientInfo);
+    impl_list_call!(SampleInfo);
+    impl_list_call!(CardInfo);
+    impl_list_call!(ModuleInfo);
 
     // TODO: tokio support???
     /// Sets up a connection to PulseAudio. PulseAudio uses a loop-based asynchronous API, and so
@@ -286,21 +279,25 @@ impl PulseAudioLoop {
                 PACommand::SetDefaultSink(id) => self.set_default_sink(id),
                 PACommand::SetDefaultSource(id) => self.set_default_source(id),
 
+                PACommand::GetSinkInfo(id) => self.get_sink_info(id),
                 PACommand::GetSinkMute(id) => self.get_sink_mute(id),
                 PACommand::GetSinkVolume(id) => self.get_sink_volume(id),
                 PACommand::SetSinkMute(id, mute) => self.set_sink_mute(id, mute),
                 PACommand::SetSinkVolume(id, vol) => self.set_sink_volume(id, vol),
 
+                PACommand::GetSinkInputInfo(idx) => self.get_sink_input_info(idx),
                 PACommand::GetSinkInputMute(idx) => self.get_sink_input_mute(idx),
                 PACommand::GetSinkInputVolume(idx) => self.get_sink_input_volume(idx),
                 PACommand::SetSinkInputMute(idx, mute) => self.set_sink_input_mute(idx, mute),
                 PACommand::SetSinkInputVolume(idx, vol) => self.set_sink_input_volume(idx, vol),
 
+                PACommand::GetSourceInfo(id) => self.get_source_info(id),
                 PACommand::GetSourceMute(id) => self.get_source_mute(id),
                 PACommand::GetSourceVolume(id) => self.get_source_volume(id),
                 PACommand::SetSourceMute(id, mute) => self.set_source_mute(id, mute),
                 PACommand::SetSourceVolume(id, vol) => self.set_source_volume(id, vol),
 
+                PACommand::GetSourceOutputInfo(idx) => self.get_source_output_info(idx),
                 PACommand::GetSourceOutputMute(idx) => self.get_source_output_mute(idx),
                 PACommand::GetSourceOutputVolume(idx) => self.get_source_output_volume(idx),
                 PACommand::SetSourceOutputMute(idx, mute) => self.set_source_output_mute(idx, mute),
@@ -373,7 +370,7 @@ impl PulseAudioLoop {
             // but if it's an index, first find the index, and then set the default
             PAIdent::Index(idx) => {
                 let tx = self.tx.clone();
-                self.get_sink_info(ident, move |_, ctx, info| {
+                self.with_sink_info(ident, move |_, ctx, info| {
                     info.name
                         .as_ref()
                         .map(|name| {
@@ -409,7 +406,7 @@ impl PulseAudioLoop {
             // but if it's an index, first find the index, and then set the default
             PAIdent::Index(idx) => {
                 let tx = self.tx.clone();
-                self.get_source_info(ident, move |_, ctx, info| {
+                self.with_source_info(ident, move |_, ctx, info| {
                     info.name
                         .as_ref()
                         .map(|name| {
@@ -462,9 +459,17 @@ impl PulseAudioLoop {
      * Sinks
      */
 
+    fn get_sink_info(&self, ident: PAIdent) {
+        let tx = self.tx.clone();
+        self.with_sink_info(ident, move |_, _, info| {
+            tx.send(PAResponse::SinkInfo(info.into())).ignore();
+            Ok(())
+        });
+    }
+
     fn get_sink_mute(&self, ident: PAIdent) {
         let tx = self.tx.clone();
-        self.get_sink_info(ident, move |ident, _, info| {
+        self.with_sink_info(ident, move |ident, _, info| {
             tx.send(PAResponse::Mute(ident, info.mute)).ignore();
             Ok(())
         });
@@ -486,7 +491,7 @@ impl PulseAudioLoop {
 
     fn get_sink_volume(&self, ident: PAIdent) {
         let tx = self.tx.clone();
-        self.get_sink_info(ident, move |ident, _, info| {
+        self.with_sink_info(ident, move |ident, _, info| {
             tx.send(PAResponse::Volume(
                 ident,
                 Self::read_volumes(
@@ -501,7 +506,7 @@ impl PulseAudioLoop {
 
     fn set_sink_volume(&self, ident: PAIdent, volume_spec: VolumeSpec) {
         let tx = self.tx.clone();
-        self.get_sink_info(ident, move |ident, ctx, info| {
+        self.with_sink_info(ident, move |ident, ctx, info| {
             let mut introspector = ctx.borrow_mut().introspect();
             let cv = updated_channel_volumes(info.volume, &volume_spec);
             let tx = tx.clone();
@@ -518,13 +523,22 @@ impl PulseAudioLoop {
             Ok(())
         });
     }
+
     /*
      * Sources
      */
 
+    fn get_source_info(&self, ident: PAIdent) {
+        let tx = self.tx.clone();
+        self.with_source_info(ident, move |_, _, info| {
+            tx.send(PAResponse::SourceInfo(info.into())).ignore();
+            Ok(())
+        });
+    }
+
     fn get_source_mute(&self, ident: PAIdent) {
         let tx = self.tx.clone();
-        self.get_source_info(ident, move |ident, _, info| {
+        self.with_source_info(ident, move |ident, _, info| {
             tx.send(PAResponse::Mute(ident, info.mute)).ignore();
             Ok(())
         });
@@ -546,7 +560,7 @@ impl PulseAudioLoop {
 
     fn get_source_volume(&self, ident: PAIdent) {
         let tx = self.tx.clone();
-        self.get_source_info(ident, move |ident, _, info| {
+        self.with_source_info(ident, move |ident, _, info| {
             tx.send(PAResponse::Volume(
                 ident,
                 Self::read_volumes(
@@ -562,7 +576,7 @@ impl PulseAudioLoop {
 
     fn set_source_volume(&self, ident: PAIdent, volume_spec: VolumeSpec) {
         let tx = self.tx.clone();
-        self.get_source_info(ident, move |ident, ctx, info| {
+        self.with_source_info(ident, move |ident, ctx, info| {
             let mut introspector = ctx.borrow_mut().introspect();
             let cv = updated_channel_volumes(info.volume, &volume_spec);
             let tx = tx.clone();
@@ -588,9 +602,17 @@ impl PulseAudioLoop {
      * Sink Inputs
      */
 
+    fn get_sink_input_info(&self, idx: u32) {
+        let tx = self.tx.clone();
+        self.with_sink_input_info(idx, move |_, _, info| {
+            tx.send(PAResponse::SinkInputInfo(info.into())).ignore();
+            Ok(())
+        });
+    }
+
     fn get_sink_input_mute(&self, idx: u32) {
         let tx = self.tx.clone();
-        self.get_sink_input_info(idx, move |ident, _, info| {
+        self.with_sink_input_info(idx, move |ident, _, info| {
             tx.send(PAResponse::Mute(ident, info.mute)).ignore();
             Ok(())
         });
@@ -598,7 +620,7 @@ impl PulseAudioLoop {
 
     fn get_sink_input_volume(&self, idx: u32) {
         let tx = self.tx.clone();
-        self.get_sink_input_info(idx, move |ident, _, info| {
+        self.with_sink_input_info(idx, move |ident, _, info| {
             tx.send(PAResponse::Volume(
                 ident,
                 Self::read_volumes(
@@ -621,7 +643,7 @@ impl PulseAudioLoop {
 
     fn set_sink_input_volume(&self, idx: u32, volume_spec: VolumeSpec) {
         let tx = self.tx.clone();
-        self.get_sink_input_info(idx, move |_, ctx, info| {
+        self.with_sink_input_info(idx, move |_, ctx, info| {
             let mut introspector = ctx.borrow_mut().introspect();
             let cv = updated_channel_volumes(info.volume, &volume_spec);
             let tx = tx.clone();
@@ -636,9 +658,17 @@ impl PulseAudioLoop {
      * Source Outputs
      */
 
+    fn get_source_output_info(&self, idx: u32) {
+        let tx = self.tx.clone();
+        self.with_source_output_info(idx, move |_, _, info| {
+            tx.send(PAResponse::SourceOutputInfo(info.into())).ignore();
+            Ok(())
+        });
+    }
+
     fn get_source_output_mute(&self, idx: u32) {
         let tx = self.tx.clone();
-        self.get_source_output_info(idx, move |ident, _, info| {
+        self.with_source_output_info(idx, move |ident, _, info| {
             tx.send(PAResponse::Mute(ident, info.mute)).ignore();
             Ok(())
         });
@@ -646,7 +676,7 @@ impl PulseAudioLoop {
 
     fn get_source_output_volume(&self, idx: u32) {
         let tx = self.tx.clone();
-        self.get_source_output_info(idx, move |ident, _, info| {
+        self.with_source_output_info(idx, move |ident, _, info| {
             tx.send(PAResponse::Volume(
                 ident,
                 Self::read_volumes(
@@ -669,7 +699,7 @@ impl PulseAudioLoop {
 
     fn set_source_output_volume(&self, idx: u32, volume_spec: VolumeSpec) {
         let tx = self.tx.clone();
-        self.get_source_output_info(idx, move |_, ctx, info| {
+        self.with_source_output_info(idx, move |_, ctx, info| {
             let mut introspector = ctx.borrow_mut().introspect();
             let cv = updated_channel_volumes(info.volume, &volume_spec);
             let tx = tx.clone();

@@ -28,6 +28,8 @@ pub enum Command {
     /// Get the default source (if any)
     SetDefaultSource(BaseArgs),
 
+    /// Get information about a sink
+    GetSinkInfo(BaseArgs),
     /// Check if a sink is muted
     GetSinkMute(BaseArgs),
     /// Mute a sink
@@ -37,6 +39,8 @@ pub enum Command {
     /// Set the volume(s) for a sink
     SetSinkVolume(SetVolumeArgs),
 
+    /// Get information about a source
+    GetSourceInfo(BaseArgs),
     /// Check if a source is muted
     GetSourceMute(BaseArgs),
     /// Mute a source
@@ -46,6 +50,8 @@ pub enum Command {
     /// Set the volume(s) for a source
     SetSourceVolume(SetVolumeArgs),
 
+    /// Get information about a sink-input
+    GetSinkInputInfo(BaseArgs),
     /// Check if a sink-input is muted
     GetSinkInputMute(BaseArgs),
     /// Mute a sink-input
@@ -55,6 +61,8 @@ pub enum Command {
     /// Set the volume(s) for a sink-input
     SetSinkInputVolume(SetVolumeArgs),
 
+    /// Get information about a source-output
+    GetSourceOutputInfo(BaseArgs),
     /// Check if a source-output is muted
     GetSourceOutputMute(BaseArgs),
     /// Mute a source-output
