@@ -242,6 +242,11 @@ impl PulseAudio {
         self.operation_result()
     }
 
+    pub fn suspend_sink(&self, id: PAIdent, suspend: bool) -> Result<OperationResult> {
+        self.tx.send(PACommand::SuspendSink(id, suspend))?;
+        self.operation_result()
+    }
+
     /*
      * Sources
      */
@@ -268,6 +273,11 @@ impl PulseAudio {
 
     pub fn set_source_volume(&self, id: PAIdent, vol: VolumeSpec) -> Result<OperationResult> {
         self.tx.send(PACommand::SetSourceVolume(id, vol))?;
+        self.operation_result()
+    }
+
+    pub fn suspend_source(&self, id: PAIdent, suspend: bool) -> Result<OperationResult> {
+        self.tx.send(PACommand::SuspendSource(id, suspend))?;
         self.operation_result()
     }
 

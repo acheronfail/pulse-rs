@@ -293,12 +293,14 @@ impl PulseAudioLoop {
                 PACommand::GetSinkVolume(id) => self.get_sink_volume(id),
                 PACommand::SetSinkMute(id, mute) => self.set_sink_mute(id, mute),
                 PACommand::SetSinkVolume(id, vol) => self.set_sink_volume(id, vol),
+                PACommand::SuspendSink(id, suspend) => self.suspend_sink(id, suspend),
 
                 PACommand::GetSourceInfo(id) => self.get_source_info(id),
                 PACommand::GetSourceMute(id) => self.get_source_mute(id),
                 PACommand::GetSourceVolume(id) => self.get_source_volume(id),
                 PACommand::SetSourceMute(id, mute) => self.set_source_mute(id, mute),
                 PACommand::SetSourceVolume(id, vol) => self.set_source_volume(id, vol),
+                PACommand::SuspendSource(id, suspend) => self.suspend_source(id, suspend),
 
                 PACommand::GetSinkInputInfo(idx) => self.get_sink_input_info(idx),
                 PACommand::GetSinkInputMute(idx) => self.get_sink_input_mute(idx),
@@ -583,6 +585,20 @@ impl PulseAudioLoop {
         });
     }
 
+    fn suspend_sink(&self, ident: PAIdent, suspend: bool) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
+        let tx = self.tx.clone();
+        let ctx = self.ctx.clone();
+        match ident {
+            PAIdent::Index(idx) => {
+                introspector.suspend_sink_by_index(idx, suspend, Some(Self::success_cb(ctx, tx)));
+            }
+            PAIdent::Name(ref name) => {
+                introspector.suspend_sink_by_name(name, suspend, Some(Self::success_cb(ctx, tx)));
+            }
+        }
+    }
+
     /*
      * Sources
      */
@@ -655,6 +671,20 @@ impl PulseAudioLoop {
 
             Ok(())
         });
+    }
+
+    fn suspend_source(&self, ident: PAIdent, suspend: bool) {
+        let mut introspector = self.ctx.borrow_mut().introspect();
+        let tx = self.tx.clone();
+        let ctx = self.ctx.clone();
+        match ident {
+            PAIdent::Index(idx) => {
+                introspector.suspend_source_by_index(idx, suspend, Some(Self::success_cb(ctx, tx)));
+            }
+            PAIdent::Name(ref name) => {
+                introspector.suspend_source_by_name(name, suspend, Some(Self::success_cb(ctx, tx)));
+            }
+        }
     }
 
     /*

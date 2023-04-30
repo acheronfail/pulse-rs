@@ -50,6 +50,8 @@ pub enum Command {
     GetSinkVolume(BaseArgs),
     /// Set the volume(s) for a sink
     SetSinkVolume(SetVolumeArgs),
+    /// Suspend a sink
+    SuspendSink(SuspendArgs),
 
     /// Get information about a source
     GetSourceInfo(BaseArgs),
@@ -61,6 +63,8 @@ pub enum Command {
     GetSourceVolume(BaseArgs),
     /// Set the volume(s) for a source
     SetSourceVolume(SetVolumeArgs),
+    /// Suspend a source
+    SuspendSource(SuspendArgs),
 
     /// Get information about a sink-input
     GetSinkInputInfo(BaseArgs),
@@ -185,10 +189,12 @@ pub struct SetMuteArgs {
     pub mute: Bool,
 }
 
-impl From<&SetMuteArgs> for PAIdent {
-    fn from(value: &SetMuteArgs) -> Self {
-        (&value.base_args).into()
-    }
+#[derive(Debug, Args)]
+pub struct SuspendArgs {
+    #[clap(flatten)]
+    pub base_args: BaseArgs,
+    #[arg(value_enum)]
+    pub suspend: Bool,
 }
 
 #[derive(Debug, Args)]

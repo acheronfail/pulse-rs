@@ -82,20 +82,30 @@ fn main() -> Result<(), Box<dyn Error>> {
         GetSinkInfo(args) => json_print!(pa.get_sink_info((&args).into())?),
         GetSinkMute(args) => json_print!(pa.get_sink_mute((&args).into())?),
         GetSinkVolume(args) => json_print!(pa.get_sink_volume((&args).into())?),
-        SetSinkMute(args) => json_print!(pa.set_sink_mute((&args).into(), args.mute.into())?),
+        SetSinkMute(args) => {
+            json_print!(pa.set_sink_mute((&args.base_args).into(), args.mute.into())?)
+        }
         SetSinkVolume(args) => json_print!(pa.set_sink_volume((&args).into(), (&args).into())?),
+        SuspendSink(args) => {
+            json_print!(pa.suspend_sink((&args.base_args).into(), args.suspend.into())?)
+        }
 
         GetSourceInfo(args) => json_print!(pa.get_source_info((&args).into())?),
         GetSourceMute(args) => json_print!(pa.get_source_mute((&args).into())?),
         GetSourceVolume(args) => json_print!(pa.get_source_volume((&args).into())?),
-        SetSourceMute(args) => json_print!(pa.set_source_mute((&args).into(), args.mute.into())?),
+        SetSourceMute(args) => {
+            json_print!(pa.set_source_mute((&args.base_args).into(), args.mute.into())?)
+        }
         SetSourceVolume(args) => json_print!(pa.set_source_volume((&args).into(), (&args).into())?),
+        SuspendSource(args) => {
+            json_print!(pa.suspend_source((&args.base_args).into(), args.suspend.into())?)
+        }
 
         GetSinkInputInfo(args) => json_print!(pa.get_sink_input_info((&args).into())?),
         GetSinkInputMute(args) => json_print!(pa.get_sink_input_mute((&args).into())?),
         GetSinkInputVolume(args) => json_print!(pa.get_sink_input_volume((&args).into())?),
         SetSinkInputMute(args) => {
-            json_print!(pa.set_sink_input_mute((&args).into(), args.mute.into())?)
+            json_print!(pa.set_sink_input_mute((&args.base_args).into(), args.mute.into())?)
         }
         SetSinkInputVolume(args) => {
             json_print!(pa.set_sink_input_volume((&args).into(), (&args).into())?)
@@ -107,7 +117,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         GetSourceOutputMute(args) => json_print!(pa.get_source_output_mute((&args).into())?),
         GetSourceOutputVolume(args) => json_print!(pa.get_source_output_volume((&args).into())?),
         SetSourceOutputMute(args) => {
-            json_print!(pa.set_source_output_mute((&args).into(), args.mute.into())?)
+            json_print!(pa.set_source_output_mute((&args.base_args).into(), args.mute.into())?)
         }
         SetSourceOutputVolume(args) => {
             json_print!(pa.set_source_output_volume((&args).into(), (&args).into())?)
