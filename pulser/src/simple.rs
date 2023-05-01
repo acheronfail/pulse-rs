@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fmt::Display;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
 
@@ -8,10 +9,11 @@ use crate::api::*;
 use crate::mainloop::PulseAudioLoop;
 use crate::sender::EventSender;
 
-macro_rules! extract_unsafe {
+macro_rules! assume_variant {
     ($event:expr, $pattern:pat => $mapping:expr) => {
         match $event {
             $pattern => Ok($mapping),
+            PAResponse::OpError(s) => Err((OperationResult::Failure { error: s }).into()),
             ev => Err(format!("Expected {} but received {:?}", stringify!($pattern), ev).into()),
         }
     };
@@ -23,6 +25,17 @@ pub enum OperationResult {
     Success,
     Failure { error: String },
 }
+
+impl Display for OperationResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OperationResult::Success => f.write_str("success"),
+            OperationResult::Failure { error } => f.write_str(error),
+        }
+    }
+}
+
+impl Error for OperationResult {}
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -72,12 +85,12 @@ impl PulseAudio {
 
     pub fn get_server_info(&self) -> Result<PAServerInfo> {
         self.tx.send(PACommand::GetServerInfo)?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::ServerInfo(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::ServerInfo(x) => x)
     }
 
     pub fn get_default_sink(&self) -> Result<Option<PAIdent>> {
         self.tx.send(PACommand::GetDefaultSink)?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::DefaultSink(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::DefaultSink(x) => x)
     }
 
     pub fn set_default_sink(&self, id: PAIdent) -> Result<OperationResult> {
@@ -87,7 +100,7 @@ impl PulseAudio {
 
     pub fn get_default_source(&self) -> Result<Option<PAIdent>> {
         self.tx.send(PACommand::GetDefaultSource)?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::DefaultSource(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::DefaultSource(x) => x)
     }
 
     pub fn set_default_source(&self, id: PAIdent) -> Result<OperationResult> {
@@ -110,7 +123,7 @@ impl PulseAudio {
 
     pub fn get_card_info(&self, id: PAIdent) -> Result<PACardInfo> {
         self.tx.send(PACommand::GetCardInfo(id))?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::CardInfo(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::CardInfo(x) => x)
     }
 
     pub fn set_card_profile(&self, id: PAIdent, profile: String) -> Result<OperationResult> {
@@ -168,7 +181,7 @@ impl PulseAudio {
         match id {
             PAIdent::Index(idx) => {
                 self.tx.send(PACommand::GetClientInfo(idx))?;
-                extract_unsafe!(self.rx.recv()?, PAResponse::ClientInfo(x) => x)
+                assume_variant!(self.rx.recv()?, PAResponse::ClientInfo(x) => x)
             }
             PAIdent::Name(ref name) => {
                 let client = self.find_client_info_by_name(name)?;
@@ -198,7 +211,7 @@ impl PulseAudio {
         match id {
             PAIdent::Index(idx) => {
                 self.tx.send(PACommand::GetModuleInfo(idx))?;
-                extract_unsafe!(self.rx.recv()?, PAResponse::ModuleInfo(x) => x)
+                assume_variant!(self.rx.recv()?, PAResponse::ModuleInfo(x) => x)
             }
             PAIdent::Name(ref name) => {
                 let module = self.find_module_info_by_name(name)?;
@@ -209,7 +222,7 @@ impl PulseAudio {
 
     pub fn load_module(&self, name: String, args: String) -> Result<u32> {
         self.tx.send(PACommand::LoadModule(name, args))?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::ModuleLoaded(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::ModuleLoaded(x) => x)
     }
 
     pub fn unload_module(&self, id: PAIdent) -> Result<OperationResult> {
@@ -231,42 +244,42 @@ impl PulseAudio {
 
     pub fn get_card_info_list(&self) -> Result<Vec<PACardInfo>> {
         self.tx.send(PACommand::GetCardInfoList)?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::CardInfoList(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::CardInfoList(x) => x)
     }
 
     pub fn get_client_info_list(&self) -> Result<Vec<PAClientInfo>> {
         self.tx.send(PACommand::GetClientInfoList)?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::ClientInfoList(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::ClientInfoList(x) => x)
     }
 
     pub fn get_module_info_list(&self) -> Result<Vec<PAModuleInfo>> {
         self.tx.send(PACommand::GetModuleInfoList)?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::ModuleInfoList(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::ModuleInfoList(x) => x)
     }
 
     pub fn get_sample_info_list(&self) -> Result<Vec<PASampleInfo>> {
         self.tx.send(PACommand::GetSampleInfoList)?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::SampleInfoList(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::SampleInfoList(x) => x)
     }
 
     pub fn get_sink_info_list(&self) -> Result<Vec<PASinkInfo>> {
         self.tx.send(PACommand::GetSinkInfoList)?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::SinkInfoList(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::SinkInfoList(x) => x)
     }
 
     pub fn get_sink_input_info_list(&self) -> Result<Vec<PASinkInputInfo>> {
         self.tx.send(PACommand::GetSinkInputInfoList)?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::SinkInputInfoList(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::SinkInputInfoList(x) => x)
     }
 
     pub fn get_source_info_list(&self) -> Result<Vec<PASourceInfo>> {
         self.tx.send(PACommand::GetSourceInfoList)?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::SourceInfoList(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::SourceInfoList(x) => x)
     }
 
     pub fn get_source_output_info_list(&self) -> Result<Vec<PASourceOutputInfo>> {
         self.tx.send(PACommand::GetSourceOutputInfoList)?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::SourceOutputInfoList(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::SourceOutputInfoList(x) => x)
     }
 
     /*
@@ -275,17 +288,17 @@ impl PulseAudio {
 
     pub fn get_sink_info(&self, id: PAIdent) -> Result<PASinkInfo> {
         self.tx.send(PACommand::GetSinkInfo(id))?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::SinkInfo(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::SinkInfo(x) => x)
     }
 
     pub fn get_sink_mute(&self, id: PAIdent) -> Result<bool> {
         self.tx.send(PACommand::GetSinkMute(id))?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::Mute(_, x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::Mute(_, x) => x)
     }
 
     pub fn get_sink_volume(&self, id: PAIdent) -> Result<VolumeReadings> {
         self.tx.send(PACommand::GetSinkVolume(id))?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::Volume(_, x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::Volume(_, x) => x)
     }
 
     pub fn set_sink_mute(&self, id: PAIdent, mute: bool) -> Result<OperationResult> {
@@ -314,17 +327,17 @@ impl PulseAudio {
 
     pub fn get_source_info(&self, id: PAIdent) -> Result<PASourceInfo> {
         self.tx.send(PACommand::GetSourceInfo(id))?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::SourceInfo(x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::SourceInfo(x) => x)
     }
 
     pub fn get_source_mute(&self, id: PAIdent) -> Result<bool> {
         self.tx.send(PACommand::GetSourceMute(id))?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::Mute(_, x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::Mute(_, x) => x)
     }
 
     pub fn get_source_volume(&self, id: PAIdent) -> Result<VolumeReadings> {
         self.tx.send(PACommand::GetSourceVolume(id))?;
-        extract_unsafe!(self.rx.recv()?, PAResponse::Volume(_, x) => x)
+        assume_variant!(self.rx.recv()?, PAResponse::Volume(_, x) => x)
     }
 
     pub fn set_source_mute(&self, id: PAIdent, mute: bool) -> Result<OperationResult> {
@@ -355,7 +368,7 @@ impl PulseAudio {
         match id {
             PAIdent::Index(idx) => {
                 self.tx.send(PACommand::GetSinkInputInfo(idx))?;
-                extract_unsafe!(self.rx.recv()?, PAResponse::SinkInputInfo(x) => x)
+                assume_variant!(self.rx.recv()?, PAResponse::SinkInputInfo(x) => x)
             }
             PAIdent::Name(ref name) => {
                 let si = self.find_sink_input_info_by_name(name)?;
@@ -368,7 +381,7 @@ impl PulseAudio {
         match id {
             PAIdent::Index(idx) => {
                 self.tx.send(PACommand::GetSinkInputMute(idx))?;
-                extract_unsafe!(self.rx.recv()?, PAResponse::Mute(_, x) => x)
+                assume_variant!(self.rx.recv()?, PAResponse::Mute(_, x) => x)
             }
             PAIdent::Name(ref name) => {
                 let si = self.find_sink_input_info_by_name(name)?;
@@ -381,7 +394,7 @@ impl PulseAudio {
         match id {
             PAIdent::Index(idx) => {
                 self.tx.send(PACommand::GetSinkInputVolume(idx))?;
-                extract_unsafe!(self.rx.recv()?, PAResponse::Volume(_, x) => x)
+                assume_variant!(self.rx.recv()?, PAResponse::Volume(_, x) => x)
             }
             PAIdent::Name(ref name) => {
                 let si = self.find_sink_input_info_by_name(name)?;
@@ -450,7 +463,7 @@ impl PulseAudio {
         match id {
             PAIdent::Index(idx) => {
                 self.tx.send(PACommand::GetSourceOutputInfo(idx))?;
-                extract_unsafe!(self.rx.recv()?, PAResponse::SourceOutputInfo(x) => x)
+                assume_variant!(self.rx.recv()?, PAResponse::SourceOutputInfo(x) => x)
             }
             PAIdent::Name(ref name) => {
                 let si = self.find_source_output_info_by_name(name)?;
@@ -463,7 +476,7 @@ impl PulseAudio {
         match id {
             PAIdent::Index(idx) => {
                 self.tx.send(PACommand::GetSinkInputMute(idx))?;
-                extract_unsafe!(self.rx.recv()?, PAResponse::Mute(_, x) => x)
+                assume_variant!(self.rx.recv()?, PAResponse::Mute(_, x) => x)
             }
             PAIdent::Name(ref name) => {
                 let si = self.find_source_output_info_by_name(name)?;
@@ -476,7 +489,7 @@ impl PulseAudio {
         match id {
             PAIdent::Index(idx) => {
                 self.tx.send(PACommand::GetSinkInputVolume(idx))?;
-                extract_unsafe!(self.rx.recv()?, PAResponse::Volume(_, x) => x)
+                assume_variant!(self.rx.recv()?, PAResponse::Volume(_, x) => x)
             }
             PAIdent::Name(ref name) => {
                 let si = self.find_source_output_info_by_name(name)?;

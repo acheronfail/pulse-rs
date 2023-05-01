@@ -6,7 +6,7 @@ use std::error::Error;
 
 use clap::{Parser, ValueEnum};
 use pulser::api::PAMask;
-use pulser::simple::PulseAudio;
+use pulser::simple::{OperationResult, PulseAudio};
 use serde_json::{to_value, Value};
 
 use crate::cli::Command::*;
@@ -19,7 +19,7 @@ macro_rules! json_print {
     };
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<(), Box<dyn Error>> {
     let args = Cli::parse();
 
     let pa = PulseAudio::connect(Some("PulserCli"));
@@ -163,4 +163,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     Ok(())
+}
+
+fn main() {
+    if let Err(e) = run() {
+        println!(
+            "{}",
+            serde_json::to_string(&OperationResult::Failure {
+                error: e.to_string(),
+            })
+            .unwrap_or_else(|e| format!("Failed to serialize error: {}", e))
+        );
+    }
 }

@@ -23,6 +23,7 @@ use libpulse_binding::context::{Context, FlagSet, State};
 use libpulse_binding::mainloop::threaded::Mainloop;
 use libpulse_binding::proplist::{properties, Proplist};
 use libpulse_binding::volume::Volume;
+use libpulse_sys::PA_INVALID_INDEX;
 
 use super::api::*;
 use super::util::updated_channel_volumes;
@@ -519,16 +520,19 @@ impl PulseAudioLoop {
 
     fn load_module(&self, name: &String, argument: &String) {
         let tx = self.tx.clone();
+        let ctx = self.ctx.clone();
         let mut introspector = self.ctx.borrow_mut().introspect();
-        // TODO: can I catch this panic? or at least error gracefully?
         introspector.load_module(name, argument, move |index: u32| {
-            tx.send(PAResponse::ModuleLoaded(index)).ignore();
+            if index == PA_INVALID_INDEX {
+                Self::handle_error(&ctx, &tx);
+            } else {
+                tx.send(PAResponse::ModuleLoaded(index)).ignore();
+            }
         });
     }
 
     fn unload_module(&self, idx: u32) {
         let mut introspector = self.ctx.borrow_mut().introspect();
-        // TODO: can I catch this panic? or at least error gracefully?
         introspector.unload_module(idx, Self::success_cb(self.ctx.clone(), self.tx.clone()));
     }
 
